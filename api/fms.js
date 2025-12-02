@@ -1,11 +1,13 @@
-let cachedJwt = null;            // data.token
-let cachedRsa = null;            // data.third_party_token
+let cachedJwt = null;        // data.token (short JWT)
+let cachedRsa = null;        // data.third_party_token (long RSA)
 let lastLoginTime = 0;
 
-// LOGIN (CORRECT)
+// ===========================================================
+// LOGIN FUNCTION (CORRECTED FROM YOUR HAR FILE)
+// ===========================================================
 async function loginToFms() {
   const now = Date.now();
-  const expired = now - lastLoginTime > 25 * 60 * 1000;
+  const expired = now - lastLoginTime > 25 * 60 * 1000; // 25 minutes
 
   if (cachedJwt && cachedRsa && !expired) {
     return { jwt: cachedJwt, rsa: cachedRsa };
@@ -30,25 +32,32 @@ async function loginToFms() {
   const json = await res.json();
 
   if (!json?.data?.token || !json?.data?.third_party_token) {
-    console.log("❌ Login failed:", json);
-    throw new Error("Failed to login");
+    console.log("❌ LOGIN FAILED RESPONSE:", json);
+    throw new Error("Failed to login to FMS");
   }
 
-  cachedJwt = json.data.token;                 // short JWT → fms-token
-  cachedRsa = json.data.third_party_token;     // RSA token → authorization
+  // Store both tokens
+  cachedJwt = json.data.token;                 // short token (used for fms-token)
+  cachedRsa = json.data.third_party_token;     // long RSA (used for authorization)
+
   lastLoginTime = now;
 
-  console.log("✅ Login success");
+  console.log("✅ FMS Login Successful");
 
   return { jwt: cachedJwt, rsa: cachedRsa };
 }
 
+// ===========================================================
+// MAIN SERVERLESS HANDLER
+// ===========================================================
 export default async function handler(req, res) {
-  if (req.method !== "POST")
+  if (req.method !== "POST") {
     return res.status(405).json({ error: "POST only" });
+  }
 
   const { action } = req.body;
 
+  // Login first
   let tokens;
   try {
     tokens = await loginToFms();
@@ -56,9 +65,9 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: "Login failed", details: err.message });
   }
 
-  // ===============================================
-  // GET TRIP TASKS  (NOW USING CORRECT HEADERS)
-  // ===============================================
+  // ===========================================================
+  // 1️⃣ GET TRIP TASKS (using CORRECT API + BOTH TOKENS)
+  // ===========================================================
   if (action === "getTasks") {
     const { trip } = req.body;
 
@@ -70,8 +79,8 @@ export default async function handler(req, res) {
         method: "GET",
         headers: {
           "Content-Type": "application/json",
-          "authorization": tokens.rsa,   // RSA token required
-          "fms-token": tokens.jwt,       // Short JWT required
+          "authorization": tokens.rsa,    // RSA TOKEN REQUIRED
+          "fms-token": tokens.jwt,        // JWT TOKEN REQUIRED
           "company-id": "SBFH",
           "fms-client": "FMS_WEB"
         }
@@ -79,20 +88,27 @@ export default async function handler(req, res) {
 
       const json = await apiRes.json();
 
-      console.log("TASK API RESPONSE:", json);
+      console.log("🔥 RAW TASK API RESPONSE:", json);
 
-      const tasks = (json.data || []).map(t => ({
-        do: t.order_no || "",
-        pro: t.tracking_no || "",
-        pu: t.pu_no || "",
-        taskNo: t.task_no || "",
-        type: t.task_type_text || "",
-        complete: (t.status || "").toLowerCase() === "complete"
-      }));
+      // Normalize tasks
+      const tasks = (json.data || []).map(t => {
+        const statusText = t?.status?.text || "";   // FIX: status is object
+
+        return {
+          do: t.order_no || "",
+          pro: t.tracking_no || "",
+          pu: t.pu_no || "",
+          taskNo: t.task_no || "",
+          type: t.task_type_text || "",
+          status: statusText,
+          complete: statusText.toLowerCase() === "complete"
+        };
+      });
 
       return res.status(200).json({ tasks });
 
     } catch (err) {
+      console.log("❌ Task Fetch Failed:", err);
       return res.status(500).json({
         error: "Failed to fetch tasks",
         details: err.message
@@ -100,10 +116,17 @@ export default async function handler(req, res) {
     }
   }
 
-  // TEMP UPDATE → TEST
+  // ===========================================================
+  // 2️⃣ UPDATE TASKS (TEMP: return TEST for now)
+  // ===========================================================
   if (action === "update") {
-    return res.status(200).json({ result: "TEST" });
+    return res.status(200).json({
+      result: "TEST"
+    });
   }
 
+  // ===========================================================
+  // UNKNOWN ACTION
+  // ===========================================================
   return res.status(400).json({ error: "Invalid action" });
 }

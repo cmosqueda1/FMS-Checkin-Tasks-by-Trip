@@ -282,9 +282,6 @@
     .task-row:hover{
       background:rgba(30,64,175,.16);
     }
-    .task-row[data-original="true"] .task-label{
-      /* just for potential styling of already-complete items */
-    }
 
     .bubble{
       font-size:14px;
@@ -308,9 +305,6 @@
       overflow:hidden;
       text-overflow:ellipsis;
       color:var(--text);
-    }
-    .task-label span.muted{
-      color:var(--muted);
     }
 
     .no-tasks{
@@ -366,7 +360,7 @@
   <div class="app-shell">
     <header>
       <div>
-        <h1>Trip Check-In Bot</h1>
+        <h1>Trip Check-In Bot</hh1>
         <p>Review Delivery / Pickup / Linehaul tasks for a Trip, mark check-ins with bubbles (○ open / ◙ checked in).</p>
       </div>
       <div class="pill-auth">
@@ -434,7 +428,7 @@
       <div class="card-header">
         <div>
           <div class="card-title">Tasks Checklist</div>
-          <div class="card-subtitle">Bubbles are left-aligned. ○ &nbsp;= open; ◙ &nbsp;= checked in.</div>
+          <div class="card-subtitle">Bubbles are left-aligned. ○ = open; ◙ = checked in.</div>
         </div>
       </div>
 
@@ -470,7 +464,7 @@
         </div>
       </div>
 
-      <div class="hint">Tip: Click any bubble row to toggle between open (○) and checked in (◙). Original status is remembered for each task.</div>
+      <div class="hint">Tip: Click any bubble row to toggle between open (○) and checked in (◙). Original status is remembered.</div>
       <div class="error" id="error-text" style="display:none;"></div>
     </section>
 
@@ -478,7 +472,7 @@
     <section class="card">
       <div class="results-header">
         <div class="results-title">Results</div>
-        <div class="results-subtitle">Format: DO | PRO | PU → Action per task type.</div>
+        <div class="results-subtitle">Format: DO | PRO | PU → Action</div>
       </div>
       <div class="results-box empty" id="results-box">No results yet.</div>
     </section>
@@ -488,19 +482,9 @@
     // =========================
     // DATA MODEL
     // =========================
-    let tasks = [];          // full flat list of tasks
+    let tasks = [];          
     let tripNo = "";
     let lastStartTime = 0;
-
-    // Expected shape (from backend):
-    // {
-    //   do: "DO251100011297",
-    //   pro: "50001344" | "" | null,
-    //   pu: "7690654" | "" | null,
-    //   taskNo: 250000000000,
-    //   taskType: "Delivery" | "Pickup" | "Linehaul",
-    //   status: "Complete" | "New" | "Dispatched" | ...
-    // }
 
     const elements = {
       tripInput: document.getElementById("trip-input"),
@@ -513,9 +497,6 @@
       statDelivery: document.getElementById("stat-delivery"),
       statPickup: document.getElementById("stat-pickup"),
       statLinehaul: document.getElementById("stat-linehaul"),
-      sectionDelivery: document.getElementById("section-delivery"),
-      sectionPickup: document.getElementById("section-pickup"),
-      sectionLinehaul: document.getElementById("section-linehaul"),
       listDelivery: document.getElementById("list-delivery"),
       listPickup: document.getElementById("list-pickup"),
       listLinehaul: document.getElementById("list-linehaul"),
@@ -570,137 +551,70 @@
     }
 
     // =========================
-    // MOCK DATA (for quick visual testing if backend not wired yet)
+    // API CALLS (REAL BACKEND)
     // =========================
-    function getMockTasks(sampleTrip){
-      // Basic deterministic mock based on trip string
-      return [
-        {
-          do: "DO251100011297",
-          pro: "50001344",
-          pu: "7690654",
-          taskNo: 250000317875,
-          taskType: "Delivery",
-          status: "Complete"
-        },
-        {
-          do: "DO251100011298",
-          pro: "50001345",
-          pu: "7690655",
-          taskNo: 250000317876,
-          taskType: "Delivery",
-          status: "New"
-        },
-        {
-          do: "DO251100011297",
-          pro: "50001344",
-          pu: "7690654",
-          taskNo: 250000317877,
-          taskType: "Pickup",
-          status: "Complete"
-        },
-        {
-          do: "DO250000332691",
-          pro: "",
-          pu: "",
-          taskNo: 250000317878,
-          taskType: "Linehaul",
-          status: "New"
-        }
-      ];
-    }
-
-    // =========================
-    // API CALLS
-    // (adjust URLs/payloads to your stack)
-    // =========================
-
     async function fetchTripTasks(trip){
-      // TODO: replace URL with your actual API (for example a Vercel /api route).
-      // Endpoint is expected to return: { tasks: [ ... ] }
-      const url = "/api/trip-tasks";
-
       try{
-        const resp = await fetch(url, {
+        const resp = await fetch("/api/fms", {
           method:"POST",
           headers:{"Content-Type":"application/json"},
-          body:JSON.stringify({ tripNo: trip })
+          body:JSON.stringify({
+            action:"getTasks",
+            tripNo:trip
+          })
         });
 
         if(!resp.ok){
-          // If backend not ready, fall back to mock for now
-          console.warn("trip-tasks API returned status", resp.status, "- using mock data instead.");
-          return { tasks: getMockTasks(trip) };
+          throw new Error("FMS getTasks failed: " + resp.status);
         }
 
         const data = await resp.json();
-        if(!data || !Array.isArray(data.tasks)){
-          console.warn("trip-tasks API JSON unexpected - using mock data.");
-          return { tasks: getMockTasks(trip) };
-        }
         return data;
       }catch(err){
-        console.warn("trip-tasks API error - using mock data:", err);
-        return { tasks: getMockTasks(trip) };
+        console.error("fetchTripTasks failed:", err);
+        throw err;
       }
     }
 
     async function applyCheckinActions(changes){
-      // changes: [{ task, action: "checkin"|"undo"|"no-change" }]
-      // Only "checkin" and "undo" will be sent to backend.
-      const url = "/api/trip-checkin";
-
-      const actionable = changes.filter(c => c.action === "checkin" || c.action === "undo");
-      if(actionable.length === 0){
-        return changes.map(c => ({ ...c, success: true }));
-      }
-
       const results = [];
 
-      // Run sequentially for now (safer for FMS)
-      for(const change of actionable){
-        try{
-          const payload = {
-            tripNo: tripNo,
-            taskNo: change.task.taskNo,
-            do: change.task.do,
-            pro: change.task.pro,
-            pu: change.task.pu,
-            taskType: change.task.taskType,
-            action: change.action === "checkin" ? "check-in" : "undo-check-in"
-          };
+      for(const change of changes){
+        if(change.action === "no-change"){
+          results.push({ ...change, success:true });
+          continue;
+        }
 
-          const resp = await fetch(url, {
+        const actionName = change.action === "checkin" ? "checkin" : "undo";
+
+        try{
+          const resp = await fetch("/api/fms", {
             method:"POST",
             headers:{"Content-Type":"application/json"},
-            body:JSON.stringify(payload)
+            body:JSON.stringify({
+              action: actionName,
+              tripNo: tripNo,
+              task: change.task
+            })
           });
 
-          const ok = resp.ok;
-          results.push({ ...change, success: ok });
+          const success = resp.ok;
+          results.push({ ...change, success });
+
         }catch(err){
-          console.error("trip-checkin API error:", err);
+          console.error("applyCheckinActions error:", err);
           results.push({ ...change, success:false });
         }
       }
 
-      // Merge back with "no-change" items as success:true
-      const enriched = changes.map(c => {
-        if(c.action === "no-change"){
-          return { ...c, success:true };
-        }
-        const found = results.find(r => r.task.taskNo === c.task.taskNo && r.action === c.action);
-        return found || { ...c, success:false };
-      });
-      return enriched;
+      return results;
     }
 
     // =========================
-    // RENDERING
+    // NORMALIZE FROM BACKEND
     // =========================
-
-    function normalizeTasks(rawTasks){
-      return rawTasks.map(rt => {
+    function normalizeTasks(raw){
+      return raw.map(rt => {
         const t = {
           do: cleanText(rt.do || rt.orderNo || rt.order_no || ""),
           pro: cleanText(rt.pro || rt.tracking_no || rt.tracking_pro || ""),
@@ -728,10 +642,8 @@
       const setStat = (element, group) => {
         const total = group.length;
         const complete = group.filter(t => t.currentComplete).length;
-        const curEl = element.querySelector(".value-current");
-        const totEl = element.querySelector(".value-total");
-        if(curEl) curEl.textContent = complete;
-        if(totEl) totEl.textContent = total;
+        element.querySelector(".value-current").textContent = complete;
+        element.querySelector(".value-total").textContent = total;
       };
 
       setStat(elements.statDelivery, delivery);
@@ -747,7 +659,6 @@
       const row = document.createElement("div");
       row.className = "task-row";
       row.dataset.taskNo = String(task.taskNo || "");
-      row.dataset.original = task.originalComplete ? "true" : "false";
 
       const bubble = document.createElement("div");
       bubble.className = "bubble " + (task.currentComplete ? "bubble-filled" : "bubble-empty");
@@ -757,15 +668,16 @@
       label.className = "task-label";
 
       let mainText = "";
+
       if(task.taskType.toLowerCase().includes("linehaul")){
-        // Option 3 as requested: "○ LH# 250000332691"
-        const lh = task.do.replace(/^DO/i, "").trim() || task.do;
+        const lh = task.do.replace(/^DO/i,"").trim() || task.do;
         mainText = `LH# ${lh}`;
       }else{
         const pro = task.pro || "—";
         const pu = task.pu || "—";
         mainText = `DO ${task.do.replace(/^DO/i,"").trim() || task.do} | PRO ${pro} | PU ${pu}`;
       }
+
       label.textContent = mainText;
 
       row.appendChild(bubble);
@@ -776,15 +688,11 @@
     function renderTaskGroup(container, list, emptyText){
       container.innerHTML = "";
       if(list.length === 0){
-        const d = document.createElement("div");
-        d.className = "no-tasks";
-        d.textContent = emptyText;
-        container.appendChild(d);
+        container.innerHTML = `<div class="no-tasks">${emptyText}</div>`;
         return;
       }
       for(const task of list){
-        const row = makeTaskRow(task);
-        container.appendChild(row);
+        container.appendChild(makeTaskRow(task));
       }
     }
 
@@ -797,47 +705,44 @@
     }
 
     function renderResults(changes){
+      const box = elements.resultsBox;
+
       if(!changes || changes.length === 0){
-        elements.resultsBox.textContent = "No results yet.";
-        elements.resultsBox.classList.add("empty");
+        box.textContent = "No results yet.";
+        box.classList.add("empty");
         return;
       }
-      elements.resultsBox.classList.remove("empty");
+
+      box.classList.remove("empty");
 
       const { delivery, pickup, linehaul } = groupTasks();
-
       const lines = [];
 
       const formatLine = (task, tag) => {
         const pro = task.pro || "—";
         const pu = task.pu || "—";
         if(task.taskType.toLowerCase().includes("linehaul")){
-          const lh = task.do.replace(/^DO/i,"").trim() || task.do;
-          return `LH# ${lh} → ${tag}`;
+          return `LH# ${task.do.replace(/^DO/i,"").trim()} → ${tag}`;
         }
-        return `DO ${task.do.replace(/^DO/i,"").trim() || task.do} | PRO ${pro} | PU ${pu} → ${tag}`;
+        return `DO ${task.do.replace(/^DO/i,"").trim()} | PRO ${pro} | PU ${pu} → ${tag}`;
       };
 
-      const actionTag = (change) => {
-        if(change.action === "checkin"){
-          return change.success ? "✅ Checked In" : "⚠️ Check-In Failed";
-        }
-        if(change.action === "undo"){
-          return change.success ? "🔁 Check-In Reverted" : "⚠️ Revert Failed";
-        }
+      const actionLabel = (change) => {
+        if(change.action === "checkin") return change.success ? "✅ Checked In" : "⚠️ Check-In Failed";
+        if(change.action === "undo") return change.success ? "🔁 Check-In Reverted" : "⚠️ Revert Failed";
         return "⏭ No Change";
       };
 
-      const pushGroup = (title, subset) => {
-        lines.push(title + ":");
-        if(subset.length === 0){
+      const pushGroup = (name, list) => {
+        lines.push(name + ":");
+        if(list.length === 0){
           lines.push("(none)");
           lines.push("---");
           return;
         }
-        for(const task of subset){
-          const change = changes.find(c => c.task.taskNo === task.taskNo) || { action:"no-change", success:true, task };
-          lines.push(formatLine(task, actionTag(change)));
+        for(const t of list){
+          const change = changes.find(c => c.task.taskNo === t.taskNo) || { action:"no-change", success:true, task:t };
+          lines.push(formatLine(t, actionLabel(change)));
         }
         lines.push("---");
       };
@@ -846,39 +751,47 @@
       pushGroup("Pickup Tasks", pickup);
       pushGroup("Linehaul Tasks", linehaul);
 
-      elements.resultsBox.textContent = lines.join("\n");
+      box.textContent = lines.join("\n");
     }
 
     // =========================
     // EVENT HANDLERS
     // =========================
-
     elements.btnLoad.addEventListener("click", async () => {
       clearError();
-      const value = cleanText(elements.tripInput.value);
-      if(!value){
+
+      const val = cleanText(elements.tripInput.value);
+      if(!val){
         showError("Please enter a Trip #.");
         return;
       }
 
-      tripNo = value;
+      tripNo = val;
       resetStatsAndTasks();
       elements.btnLoad.disabled = true;
       elements.btnApply.disabled = true;
-      setStatus("Loading tasks for Trip " + tripNo + "…", true);
+      setStatus(`Loading tasks for Trip ${tripNo}…`, true);
       startTimer();
 
-      const data = await fetchTripTasks(tripNo);
-      tasks = normalizeTasks(data.tasks || []);
-      renderTaskGroups();
-      updateElapsed();
-      setStatus("Tasks loaded for Trip " + tripNo + ".", false);
+      try{
+        const data = await fetchTripTasks(tripNo);
+        tasks = normalizeTasks(data.tasks || []);
+        renderTaskGroups();
+        updateElapsed();
+        setStatus(`Tasks loaded for Trip ${tripNo}.`, false);
+        elements.btnApply.disabled = tasks.length === 0;
+
+      }catch(err){
+        showError("Failed to load tasks.");
+        setStatus("Failed to load.", false);
+      }
+
       elements.btnLoad.disabled = false;
-      elements.btnApply.disabled = tasks.length === 0;
     });
 
     elements.btnApply.addEventListener("click", async () => {
       clearError();
+
       if(tasks.length === 0){
         showError("No tasks loaded. Load a Trip first.");
         return;
@@ -888,16 +801,12 @@
       setStatus("Applying check-in changes…", true);
       startTimer();
 
-      const changes = tasks.map(task => {
-        if(task.originalComplete && !task.currentComplete){
-          return { task, action:"undo" };
-        }else if(!task.originalComplete && task.currentComplete){
-          return { task, action:"checkin" };
-        }
-        return { task, action:"no-change" };
+      const changes = tasks.map(t => {
+        if(t.originalComplete && !t.currentComplete) return { task:t, action:"undo" };
+        if(!t.originalComplete && t.currentComplete) return { task:t, action:"checkin" };
+        return { task:t, action:"no-change" };
       });
 
-      // Call backend for check-in / undo
       const applied = await applyCheckinActions(changes);
       updateElapsed();
       setStatus("Check-in actions processed.", false);
@@ -916,20 +825,17 @@
       elements.btnApply.disabled = true;
     });
 
-    // Clicking any task row toggles its bubble
     document.addEventListener("click", (ev) => {
       const row = ev.target.closest(".task-row");
       if(!row) return;
-      const taskNo = Number(row.dataset.taskNo || "0");
+
+      const taskNo = Number(row.dataset.taskNo);
       const task = tasks.find(t => Number(t.taskNo) === taskNo);
       if(!task) return;
 
-      // Toggle currentComplete
       task.currentComplete = !task.currentComplete;
 
-      // Update bubble
       const bubble = row.querySelector(".bubble");
-      if(!bubble) return;
       bubble.classList.toggle("bubble-filled", task.currentComplete);
       bubble.classList.toggle("bubble-empty", !task.currentComplete);
       bubble.textContent = task.currentComplete ? "◙" : "○";
@@ -937,15 +843,13 @@
       updateStats();
     });
 
-    // Allow Enter key on Trip input to trigger Load
-    elements.tripInput.addEventListener("keydown", (ev) => {
-      if(ev.key === "Enter"){
-        ev.preventDefault();
+    elements.tripInput.addEventListener("keydown", e => {
+      if(e.key === "Enter"){
+        e.preventDefault();
         elements.btnLoad.click();
       }
     });
 
-    // Initial state
     setStatus("Idle.");
     updateStats();
   </script>

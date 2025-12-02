@@ -1,46 +1,59 @@
-// fms.js
+console.log("fms.js loaded");
 
 //-------------------------------------------------------------
-// 1. REAL GET TRIP CALL (FMS) — update URL + tokens later
+// 1. REAL GET TRIP CALL (fallbacks to mock data)
 //-------------------------------------------------------------
 async function fetchTripTasks(tripNo) {
-  try {
-    const url = `https://fms.item.com/fms-platform-order/driver-app/task/get-tasks/${tripNo}`;
+  console.log("Fetching trip:", tripNo);
 
+  const url = `https://fms.item.com/fms-platform-order/driver-app/task/get-tasks/${tripNo}`;
+
+  try {
     const res = await fetch(url, {
       method: "GET",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": "Bearer YOUR_TOKEN_HERE"
-      }
+      headers: { "Content-Type": "application/json" }
     });
+
+    if (!res.ok) throw new Error("API responded with " + res.status);
 
     const json = await res.json();
 
-    // Expecting: { data: [ { task info } ]}
-    return json.data || [];
+    console.log("API result:", json);
 
+    return json.data || [];
   } catch (err) {
-    console.error("GET Trip Error:", err);
-    return [];
+    console.warn("GET trip failed, using mock data:", err);
+
+    return [
+      {
+        do: "251100011297",
+        tracking_no: "50001344",
+        pu_no: "7690654",
+        task_type_text: "Delivery",
+        status: "Complete",
+        task_no: "T101"
+      },
+      {
+        do: "250000332691",
+        tracking_no: "",
+        pu_no: "",
+        task_type_text: "Linehaul",
+        status: "New",
+        task_no: "T104"
+      }
+    ];
   }
 }
 
 //-------------------------------------------------------------
-// 2. UI ELEMENTS
-//-------------------------------------------------------------
-const loadBtn = document.getElementById("loadBtn");
-const updateBtn = document.getElementById("updateBtn");
-const output = document.getElementById("output");
-const resultsBox = document.getElementById("resultsBox");
-
-//-------------------------------------------------------------
-// 3. NORMALIZE FMS TASKS INTO OUR UNIFIED STRUCTURE
+// 2. Normalize FMS structure
 //-------------------------------------------------------------
 function normalizeTasks(raw) {
+  console.log("Normalizing tasks…");
+
   return raw.map(t => ({
-    do: t.order_no || "",
-    tracking_pro: t.tracking_no || "",
+    do: t.order_no || t.do || "",
+    tracking_pro: t.tracking_no || t.pro || "",
     pu_no: t.pu_no || "",
     taskType: t.task_type_text || "",
     status: t.status || "",
@@ -49,11 +62,24 @@ function normalizeTasks(raw) {
 }
 
 //-------------------------------------------------------------
-// 4. LOAD TRIP BUTTON
+// 3. UI elements
+//-------------------------------------------------------------
+const loadBtn = document.getElementById("loadBtn");
+const updateBtn = document.getElementById("updateBtn");
+const output = document.getElementById("output");
+const resultsBox = document.getElementById("resultsBox");
+
+//-------------------------------------------------------------
+// 4. Load Trip
 //-------------------------------------------------------------
 loadBtn.addEventListener("click", async () => {
+  console.log("Load Trip clicked");
+
   const trip = document.getElementById("tripInput").value.trim();
-  if (!trip) return alert("Enter a Trip # first");
+  if (!trip) {
+    alert("Enter a Trip #");
+    return;
+  }
 
   const raw = await fetchTripTasks(trip);
   const tasks = normalizeTasks(raw);
@@ -62,9 +88,11 @@ loadBtn.addEventListener("click", async () => {
 });
 
 //-------------------------------------------------------------
-// 5. RENDER GROUPED TASKS WITH CHECKBOXES
+// 5. Render tasks grouped
 //-------------------------------------------------------------
 function renderTaskGroups(tasks) {
+  console.log("Rendering", tasks.length, "tasks");
+
   output.innerHTML = "";
 
   const groups = {
@@ -120,9 +148,11 @@ function renderTaskGroups(tasks) {
 }
 
 //-------------------------------------------------------------
-// 6. TEMP UPDATE LOGIC — RETURNS "TEST"
+// 6. Update button → returns TEST + results
 //-------------------------------------------------------------
 updateBtn.addEventListener("click", () => {
+  console.log("Update clicked");
+
   const boxes = [...document.querySelectorAll(".taskBox")];
   let lines = [];
 

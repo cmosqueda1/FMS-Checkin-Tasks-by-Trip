@@ -1,18 +1,19 @@
-let cachedToken = null;
+let cachedJwt = null;            // data.token
+let cachedRsa = null;            // data.third_party_token
 let lastLoginTime = 0;
 
-// =================================================
-// LOGIN FUNCTION (CORRECTED FROM HAR FILE)
-// =================================================
+// LOGIN (CORRECT)
 async function loginToFms() {
   const now = Date.now();
   const expired = now - lastLoginTime > 25 * 60 * 1000;
 
-  if (cachedToken && !expired) return cachedToken;
+  if (cachedJwt && cachedRsa && !expired) {
+    return { jwt: cachedJwt, rsa: cachedRsa };
+  }
 
   console.log("🔐 Logging into FMS...");
 
-  const loginRes = await fetch("https://fms.item.com/fms-platform-user/Auth/Login", {
+  const res = await fetch("https://fms.item.com/fms-platform-user/Auth/Login", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -26,52 +27,51 @@ async function loginToFms() {
     })
   });
 
-  const json = await loginRes.json();
+  const json = await res.json();
 
-  if (!json?.data?.token) {
-    console.error("❌ FMS Login Failed Response:", json);
-    throw new Error("Failed to login to FMS");
+  if (!json?.data?.token || !json?.data?.third_party_token) {
+    console.log("❌ Login failed:", json);
+    throw new Error("Failed to login");
   }
 
-  cachedToken = json.data.token;
+  cachedJwt = json.data.token;                 // short JWT → fms-token
+  cachedRsa = json.data.third_party_token;     // RSA token → authorization
   lastLoginTime = now;
 
-  console.log("✅ FMS Login Successful");
+  console.log("✅ Login success");
 
-  return cachedToken;
+  return { jwt: cachedJwt, rsa: cachedRsa };
 }
 
-// =================================================
-// MAIN HANDLER
-// =================================================
 export default async function handler(req, res) {
-  if (req.method !== "POST") {
+  if (req.method !== "POST")
     return res.status(405).json({ error: "POST only" });
-  }
 
   const { action } = req.body;
 
-  let token;
+  let tokens;
   try {
-    token = await loginToFms();
+    tokens = await loginToFms();
   } catch (err) {
     return res.status(500).json({ error: "Login failed", details: err.message });
   }
 
-  // =========================================
-  // 1️⃣ GET TRIP TASK LIST (correct API)
-  // =========================================
+  // ===============================================
+  // GET TRIP TASKS  (NOW USING CORRECT HEADERS)
+  // ===============================================
   if (action === "getTasks") {
     const { trip } = req.body;
 
     try {
-      const url = `https://fms.item.com/fms-platform-dispatch-management/TripDetail/GetTaskList?tripNo=${trip}`;
+      const url =
+        `https://fms.item.com/fms-platform-dispatch-management/TripDetail/GetTaskList?tripNo=${trip}`;
 
       const apiRes = await fetch(url, {
         method: "GET",
         headers: {
           "Content-Type": "application/json",
-          "authorization": token,
+          "authorization": tokens.rsa,   // RSA token required
+          "fms-token": tokens.jwt,       // Short JWT required
           "company-id": "SBFH",
           "fms-client": "FMS_WEB"
         }
@@ -79,7 +79,8 @@ export default async function handler(req, res) {
 
       const json = await apiRes.json();
 
-      // Normalize
+      console.log("TASK API RESPONSE:", json);
+
       const tasks = (json.data || []).map(t => ({
         do: t.order_no || "",
         pro: t.tracking_no || "",
@@ -99,13 +100,9 @@ export default async function handler(req, res) {
     }
   }
 
-  // =========================================
-  // 2️⃣ UPDATE TASKS (TEMP RETURNS TEST)
-  // =========================================
+  // TEMP UPDATE → TEST
   if (action === "update") {
-    return res.status(200).json({
-      result: "TEST"
-    });
+    return res.status(200).json({ result: "TEST" });
   }
 
   return res.status(400).json({ error: "Invalid action" });

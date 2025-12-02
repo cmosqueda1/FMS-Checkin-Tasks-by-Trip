@@ -1,58 +1,104 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
+<meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Trip Check-In Bot</title>
 
 <style>
+  :root {
+    --bg: #0a0c10;
+    --card: #0f1420;
+    --text: #e6edf6;
+    --muted: #93a4b7;
+    --accent: #22d3ee;
+    --accent2: #7c3aed;
+    --border: #1f2a3a;
+  }
+
   body {
     margin: 0;
-    background: #0a0c10;
-    color: #e6edf6;
-    font-family: Inter, sans-serif;
-    padding: 20px;
+    padding: 40px;
+    background: radial-gradient(1200px 900px at 10% -10%, #121a2b 0%, transparent 60%), var(--bg);
+    color: var(--text);
+    font-family: Inter, system-ui, sans-serif;
   }
-  h1 { margin-bottom: 20px; }
-  input, button {
-    padding: 10px;
+
+  h1 {
+    font-size: 32px;
+    margin-bottom: 25px;
+  }
+
+  .inputRow {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 30px;
+  }
+
+  input {
+    padding: 12px 15px;
+    width: 260px;
     font-size: 16px;
-    border-radius: 8px;
-    border: none;
-    outline: none;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    background: var(--card);
+    color: var(--text);
   }
-  #tripInput { width: 260px; }
-  #loadBtn { margin-left: 10px; background: #22d3ee; cursor: pointer; }
-  #updateBtn { margin-left: 10px; background: #7c3aed; color: #fff; cursor: pointer; }
+
+  button {
+    padding: 12px 18px;
+    font-size: 16px;
+    font-weight: 600;
+    border-radius: 10px;
+    cursor: pointer;
+    border: none;
+    transition: opacity .2s;
+  }
+
+  #loadBtn {
+    background: linear-gradient(135deg, #22d3ee, #0ea5e9);
+    color: #000;
+  }
+
+  #updateBtn {
+    background: linear-gradient(135deg, #7c3aed, #9333ea);
+    color: #fff;
+  }
+
+  button:hover { opacity: 0.85; }
 
   .section-title {
     font-size: 20px;
-    margin-top: 20px;
-    border-bottom: 1px solid #1f2a3a;
+    margin-top: 25px;
+    margin-bottom: 8px;
     padding-bottom: 6px;
+    border-bottom: 1px solid var(--border);
   }
 
   .taskItem {
-    background: #0f1420;
-    padding: 12px;
-    border-radius: 10px;
-    margin-top: 10px;
-    border: 1px solid #1f2a3a;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-  }
-
-  .taskLabel { font-size: 15px; }
-
-  .results {
-    margin-top: 30px;
-    white-space: pre-wrap;
-    background: #0f1420;
+    background: var(--card);
+    border: 1px solid var(--border);
     padding: 15px;
     border-radius: 10px;
-    border: 1px solid #1f2a3a;
+    margin-top: 10px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .taskLabel {
+    font-size: 15px;
+  }
+
+  .results {
+    margin-top: 40px;
+    white-space: pre-wrap;
+    background: var(--card);
+    padding: 20px;
+    border-radius: 10px;
+    border: 1px solid var(--border);
     font-family: Consolas, monospace;
+    min-height: 80px;
   }
 </style>
 </head>
@@ -61,9 +107,11 @@
 
 <h1>Trip Check-In Bot</h1>
 
-<input id="tripInput" placeholder="Enter Trip #" />
-<button id="loadBtn">Load Trip</button>
-<button id="updateBtn">Update</button>
+<div class="inputRow">
+  <input id="tripInput" placeholder="Enter Trip #" />
+  <button id="loadBtn">Load Trip</button>
+  <button id="updateBtn">Update</button>
+</div>
 
 <div id="output"></div>
 

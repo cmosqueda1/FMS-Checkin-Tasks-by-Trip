@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Trip Check-In Bot</title>
+
+<style>
+  body {
+    margin: 0;
+    background: #0a0c10;
+    color: #e6edf6;
+    font-family: Inter, sans-serif;
+    padding: 20px;
+  }
+  h1 { margin-bottom: 20px; }
+  input, button {
+    padding: 10px;
+    font-size: 16px;
+    border-radius: 8px;
+    border: none;
+    outline: none;
+  }
+  #tripInput { width: 260px; }
+  #loadBtn { margin-left: 10px; background: #22d3ee; cursor: pointer; }
+  #updateBtn { margin-left: 10px; background: #7c3aed; color: #fff; cursor: pointer; }
+
+  .section-title {
+    font-size: 20px;
+    margin-top: 20px;
+    border-bottom: 1px solid #1f2a3a;
+    padding-bottom: 6px;
+  }
+
+  .taskItem {
+    background: #0f1420;
+    padding: 12px;
+    border-radius: 10px;
+    margin-top: 10px;
+    border: 1px solid #1f2a3a;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .taskLabel { font-size: 15px; }
+
+  .results {
+    margin-top: 30px;
+    white-space: pre-wrap;
+    background: #0f1420;
+    padding: 15px;
+    border-radius: 10px;
+    border: 1px solid #1f2a3a;
+    font-family: Consolas, monospace;
+  }
+</style>
+</head>
+
+<body>
+
+<h1>Trip Check-In Bot</h1>
+
+<input id="tripInput" placeholder="Enter Trip #" />
+<button id="loadBtn">Load Trip</button>
+<button id="updateBtn">Update</button>
+
+<div id="output"></div>
+
+<div class="results" id="resultsBox"></div>
+
+<script src="fms.js"></script>
+</body>
+</html>

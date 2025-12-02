@@ -1,130 +1,154 @@
-let cachedJwt = null;
-let cachedRsa = null;
-let lastLoginTime = 0;
+// /api/fms.js
+// Single serverless router for ALL Trip Check-In Bot backend actions
 
-// ===========================================================
-// LOGIN FUNCTION
-// ===========================================================
-async function loginToFms() {
-  const now = Date.now();
-  const expired = now - lastLoginTime > 25 * 60 * 1000;
-
-  if (cachedJwt && cachedRsa && !expired) {
-    return { jwt: cachedJwt, rsa: cachedRsa };
-  }
-
-  console.log("🔐 Logging into FMS...");
-
-  const res = await fetch("https://fms.item.com/fms-platform-user/Auth/Login", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "fms-client": "FMS_WEB",
-      "Origin": "https://fms.item.com",
-      "Referer": "https://fms.item.com/"
-    },
-    body: JSON.stringify({
-      account: "RaulEscobar",
-      password: "FMSoffload1!"
-    })
-  });
-
-  const json = await res.json();
-
-  if (!json?.data?.token || !json?.data?.third_party_token) {
-    console.log("❌ LOGIN FAILED RESPONSE:", json);
-    throw new Error("Failed to login to FMS");
-  }
-
-  cachedJwt = json.data.token;
-  cachedRsa = json.data.third_party_token;
-  lastLoginTime = now;
-
-  console.log("✅ FMS Login Successful");
-
-  return { jwt: cachedJwt, rsa: cachedRsa };
-}
-
-// ===========================================================
-// MAIN HANDLER
-// ===========================================================
 export default async function handler(req, res) {
   if (req.method !== "POST") {
-    return res.status(405).json({ error: "POST only" });
+    return res.status(405).json({ error: "Method not allowed" });
   }
 
-  const { action } = req.body;
+  const body = req.body || {};
+  const { action } = body;
 
-  let tokens;
+  if (!action) {
+    return res.status(400).json({ error: "Missing action" });
+  }
+
   try {
-    tokens = await loginToFms();
-  } catch (err) {
-    return res.status(500).json({ error: "Login failed", details: err.message });
-  }
+    switch (action) {
 
-  // ===========================================================
-  // 1️⃣ GET TASK LIST + STATUS
-  // ===========================================================
-  if (action === "getTasks") {
-    const { trip } = req.body;
-
-    try {
-      const url =
-        `https://fms.item.com/fms-platform-dispatch-management/TripDetail/GetTaskList?tripNo=${trip}`;
-
-      const apiRes = await fetch(url, {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-          "authorization": tokens.rsa,
-          "fms-token": tokens.jwt,
-          "company-id": "SBFH",
-          "fms-client": "FMS_WEB"
+      // =====================================================
+      // 1) FETCH FMS TRIP TASKS
+      // =====================================================
+      case "getTasks": {
+        const { tripNo } = body;
+        if (!tripNo) {
+          return res.status(400).json({ error: "tripNo required" });
         }
-      });
 
-      const json = await apiRes.json();
+        const url =
+          "https://fms.item.com/fms-platform-dispatch-management/TripDetail/GetTaskList?tripNo=" +
+          encodeURIComponent(tripNo);
 
-      console.log("🔥 RAW TASK API RESPONSE:", json);
+        const fmsResp = await fetch(url, {
+          method: "GET",
+          headers: { "Content-Type": "application/json" },
+        });
 
-      const tasks = (json.data || []).map(t => {
-        // Extract inner reference outputs (true status)
-        const ref = Array.isArray(t.reference_outputs)
-          ? t.reference_outputs[0]
-          : null;
+        if (!fmsResp.ok) {
+          return res.status(500).json({
+            error: "FMS request failed",
+            details: await fmsResp.text(),
+          });
+        }
 
-        const statusText = ref?.status_text || "";
+        const data = await fmsResp.json();
+        const raw = data?.tasks || data || [];
 
-        return {
-          do: t.order_no || "",
-          pro: t.tracking_no || "",
-          pu: t.pu_no || "",
-          taskNo: t.task_no || "",
-          type: t.task_type_text || "",
-          status: statusText,
-          complete: statusText.toLowerCase() === "complete"
+        const clean = (v) => (v == null ? "" : String(v).trim());
+
+        const normalize = (t) => {
+          const status = clean(t.status_text || t.status);
+          const typeRaw = clean(t.task_type_text || t.taskType || "");
+
+          let taskType = "";
+          const l = typeRaw.toLowerCase();
+          if (l.includes("delivery")) taskType = "Delivery";
+          else if (l.includes("pickup")) taskType = "Pickup";
+          else if (l.includes("linehaul") || l.includes("transfer"))
+            taskType = "Linehaul";
+          else taskType = typeRaw || "Other";
+
+          return {
+            do: clean(t.order_no || t.do),
+            pro: clean(t.tracking_no || t.pro),
+            pu: clean(t.pu_no || t.reference5 || t.pu),
+            taskNo: t.task_no || t.taskNo || 0,
+            taskType,
+            status,
+          };
         };
-      });
 
-      return res.status(200).json({ tasks });
+        const normalized = raw.map((x) => normalize(x));
 
-    } catch (err) {
-      console.log("❌ Task Fetch Failed:", err);
-      return res.status(500).json({
-        error: "Failed to fetch tasks",
-        details: err.message
-      });
+        return res.status(200).json({
+          tripNo,
+          tasks: normalized,
+        });
+      }
+
+      // =====================================================
+      // 2) APPLY CHECK-IN
+      // =====================================================
+      case "checkin": {
+        const { tripNo, task } = body;
+        if (!tripNo || !task) {
+          return res.status(400).json({
+            error: "tripNo and task required",
+          });
+        }
+
+        // Replace URL with final Check-In endpoint
+        const checkUrl =
+          "https://fms.item.com/fms-platform-dispatch-management/TripDetail/TaskCheckIn";
+
+        const resp = await fetch(checkUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            tripNo,
+            taskNo: task.taskNo,
+          }),
+        });
+
+        return res.status(200).json({
+          success: resp.ok,
+          tripNo,
+          taskNo: task.taskNo,
+        });
+      }
+
+      // =====================================================
+      // 3) APPLY UNDO CHECK-IN
+      // =====================================================
+      case "undo": {
+        const { tripNo, task } = body;
+        if (!tripNo || !task) {
+          return res.status(400).json({
+            error: "tripNo and task required",
+          });
+        }
+
+        // Replace URL with final Undo endpoint
+        const undoUrl =
+          "https://fms.item.com/fms-platform-dispatch-management/TripDetail/CancelTaskCheckIn";
+
+        const resp = await fetch(undoUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            tripNo,
+            taskNo: task.taskNo,
+          }),
+        });
+
+        return res.status(200).json({
+          success: resp.ok,
+          tripNo,
+          taskNo: task.taskNo,
+        });
+      }
+
+      // =====================================================
+      // INVALID ACTION
+      // =====================================================
+      default:
+        return res.status(400).json({ error: "Unknown action: " + action });
     }
-  }
-
-  // ===========================================================
-  // 2️⃣ UPDATE (TEMP RETURNS TEST)
-  // ===========================================================
-  if (action === "update") {
-    return res.status(200).json({
-      result: "TEST"
+  } catch (err) {
+    console.error("FMS router error:", err);
+    res.status(500).json({
+      error: "Internal Server Error",
+      details: String(err),
     });
   }
-
-  return res.status(400).json({ error: "Invalid action" });
 }

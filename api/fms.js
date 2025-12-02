@@ -1,13 +1,13 @@
-let cachedJwt = null;        // data.token (short JWT)
-let cachedRsa = null;        // data.third_party_token (long RSA)
+let cachedJwt = null;
+let cachedRsa = null;
 let lastLoginTime = 0;
 
 // ===========================================================
-// LOGIN FUNCTION (CORRECTED FROM YOUR HAR FILE)
+// LOGIN FUNCTION
 // ===========================================================
 async function loginToFms() {
   const now = Date.now();
-  const expired = now - lastLoginTime > 25 * 60 * 1000; // 25 minutes
+  const expired = now - lastLoginTime > 25 * 60 * 1000;
 
   if (cachedJwt && cachedRsa && !expired) {
     return { jwt: cachedJwt, rsa: cachedRsa };
@@ -36,10 +36,8 @@ async function loginToFms() {
     throw new Error("Failed to login to FMS");
   }
 
-  // Store both tokens
-  cachedJwt = json.data.token;                 // short token (used for fms-token)
-  cachedRsa = json.data.third_party_token;     // long RSA (used for authorization)
-
+  cachedJwt = json.data.token;
+  cachedRsa = json.data.third_party_token;
   lastLoginTime = now;
 
   console.log("✅ FMS Login Successful");
@@ -48,7 +46,7 @@ async function loginToFms() {
 }
 
 // ===========================================================
-// MAIN SERVERLESS HANDLER
+// MAIN HANDLER
 // ===========================================================
 export default async function handler(req, res) {
   if (req.method !== "POST") {
@@ -57,7 +55,6 @@ export default async function handler(req, res) {
 
   const { action } = req.body;
 
-  // Login first
   let tokens;
   try {
     tokens = await loginToFms();
@@ -66,7 +63,7 @@ export default async function handler(req, res) {
   }
 
   // ===========================================================
-  // 1️⃣ GET TRIP TASKS (using CORRECT API + BOTH TOKENS)
+  // 1️⃣ GET TASK LIST + STATUS
   // ===========================================================
   if (action === "getTasks") {
     const { trip } = req.body;
@@ -79,8 +76,8 @@ export default async function handler(req, res) {
         method: "GET",
         headers: {
           "Content-Type": "application/json",
-          "authorization": tokens.rsa,    // RSA TOKEN REQUIRED
-          "fms-token": tokens.jwt,        // JWT TOKEN REQUIRED
+          "authorization": tokens.rsa,
+          "fms-token": tokens.jwt,
           "company-id": "SBFH",
           "fms-client": "FMS_WEB"
         }
@@ -90,9 +87,13 @@ export default async function handler(req, res) {
 
       console.log("🔥 RAW TASK API RESPONSE:", json);
 
-      // Normalize tasks
       const tasks = (json.data || []).map(t => {
-        const statusText = t?.status?.text || "";   // FIX: status is object
+        // Extract inner reference outputs (true status)
+        const ref = Array.isArray(t.reference_outputs)
+          ? t.reference_outputs[0]
+          : null;
+
+        const statusText = ref?.status_text || "";
 
         return {
           do: t.order_no || "",
@@ -117,7 +118,7 @@ export default async function handler(req, res) {
   }
 
   // ===========================================================
-  // 2️⃣ UPDATE TASKS (TEMP: return TEST for now)
+  // 2️⃣ UPDATE (TEMP RETURNS TEST)
   // ===========================================================
   if (action === "update") {
     return res.status(200).json({
@@ -125,8 +126,5 @@ export default async function handler(req, res) {
     });
   }
 
-  // ===========================================================
-  // UNKNOWN ACTION
-  // ===========================================================
   return res.status(400).json({ error: "Invalid action" });
 }

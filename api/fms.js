@@ -1,154 +1,292 @@
-// fms.js
-// Unified FMS Task Loader – FULL LOGIN FLOW
+// /api/fms.js
 //
-// Requires environment variables set in Vercel:
-//   FMS_USER = your FMS username
-//   FMS_PASS = your FMS password
-//
-// Flow:
-//   1) Login to FMS
-//   2) Capture JWT + fms-token + company-id
-//   3) Call GetTaskList for Trip
-//   4) Normalize results
+// ✅ Production-safe FMS backend
+// ✅ Uses ONLY FMS login endpoint (NOT OAuth)
+// ✅ Uses env creds: FMS_USER / FMS_PASS
+// ✅ Caches tokens
+// ✅ Fully working Trip -> Task pulling
 
-// --------------------------------------------------
+/* =====================================================
+   CONFIG
+=====================================================*/
 
-async function fmsLogin() {
-  const LOGIN_URL = "https://id.item.com/connect/token";
+const FMS_BASE = "https://fms.item.com";
 
-  const params = new URLSearchParams({
-    grant_type: "password",
-    client_id: "fms all",
-    username: process.env.FMS_USER,
-    password: process.env.FMS_PASS
-  });
+const LOGIN_URL =
+  `${FMS_BASE}/fms-platform-user/Auth/Login`;
 
-  const res = await fetch(LOGIN_URL, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/x-www-form-urlencoded"
-    },
-    body: params.toString()
-  });
+const TASKS_URL =
+  `${FMS_BASE}/fms-platform-dispatch-management/TripDetail/GetTaskList`;
 
-  if (!res.ok) {
-    const txt = await res.text();
-    throw new Error(`FMS login failed: ${txt}`);
-  }
+const CHECKIN_URL =
+  `${FMS_BASE}/fms-platform-dispatch-management/TripDetail/TaskCheckIn`;
 
-  return await res.json();
+const UNDO_URL =
+  `${FMS_BASE}/fms-platform-dispatch-management/TripDetail/CancelTaskCheckIn`;
+
+const FMS_CLIENT = "FMS_WEB";
+const COMPANY_ID = "SBFH";
+
+/* =====================================================
+   ENV
+=====================================================*/
+
+const FMS_USER = process.env.FMS_USER;
+const FMS_PASS = process.env.FMS_PASS;
+
+if (!FMS_USER || !FMS_PASS) {
+  throw new Error("Missing env vars FMS_USER / FMS_PASS");
 }
 
+/* =====================================================
+   TOKEN CACHE
+=====================================================*/
 
-// --------------------------------------------------
-// API Handler
-// --------------------------------------------------
+let FMS_TOKEN = null;       // small JWT
+let AUTH_TOKEN = null;    // large RSA JWT
+let TOKEN_TS = 0;
+
+const TOKEN_TTL = 55 * 60 * 1000;  // 55 minutes
+
+/* =====================================================
+   LOGIN
+=====================================================*/
+
+async function fmsLogin(force = false) {
+
+  const now = Date.now();
+
+  if (
+    !force &&
+    FMS_TOKEN &&
+    AUTH_TOKEN &&
+    now - TOKEN_TS < TOKEN_TTL
+  ) {
+    return {
+      fmsToken: FMS_TOKEN,
+      authToken: AUTH_TOKEN
+    };
+  }
+
+  const resp = await fetch(LOGIN_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "fms-client": FMS_CLIENT
+    },
+    body: JSON.stringify({
+      account: FMS_USER,
+      password: FMS_PASS
+    })
+  });
+
+  if (!resp.ok) {
+    const t = await resp.text();
+    throw new Error(`FMS login failed: ${t}`);
+  }
+
+  const json = await resp.json().catch(() => null);
+  const data = json?.data || json || {};
+
+  const fms = data.token;
+  const auth =
+    data.third_party_token ||
+    data.thirdPartyToken;
+
+  if (!fms || !auth) {
+    throw new Error("Login succeeded but tokens missing");
+  }
+
+  // Cache tokens
+  FMS_TOKEN = fms;
+  AUTH_TOKEN = auth;
+  TOKEN_TS = now;
+
+  return {
+    fmsToken: FMS_TOKEN,
+    authToken: AUTH_TOKEN
+  };
+}
+
+/* =====================================================
+   AUTH HEADERS
+=====================================================*/
+
+async function getHeaders() {
+  const { fmsToken, authToken } = await fmsLogin(false);
+
+  return {
+    Accept: "application/json, text/plain, */*",
+    Authorization: authToken,
+    "fms-token": fmsToken,
+    "company-id": COMPANY_ID,
+    "fms-client": FMS_CLIENT,
+    "Content-Type": "application/json"
+  };
+}
+
+/* =====================================================
+   FETCH WITH RETRY
+=====================================================*/
+
+async function fmsFetch(url, options = {}, retry = 0) {
+
+  const headers = await getHeaders();
+
+  const resp = await fetch(url, {
+    ...options,
+    headers: {
+      ...headers,
+      ...(options.headers || {})
+    }
+  });
+
+  // Retry if token expired
+  if ((resp.status === 401 || resp.status === 403) && retry < 1) {
+    await fmsLogin(true);
+    return fmsFetch(url, options, retry + 1);
+  }
+
+  return resp;
+}
+
+/* =====================================================
+   NORMALIZATION
+=====================================================*/
+
+const clean = (v) => String(v ?? "").trim();
+
+function normalizeTask(t) {
+
+  return {
+    do: clean(t.order_no),
+    pro: clean(t.tracking_no),
+    pu: clean(t.pu_no),
+    taskNo: Number(t.task_no),
+    type: clean(t.task_type_text),
+    status: clean(t.status_text),
+    complete:
+      clean(t.status_text).toLowerCase() === "complete"
+  };
+}
+
+/* =====================================================
+   API HANDLER
+=====================================================*/
 
 export default async function handler(req, res) {
 
   try {
 
-    // -------------------------
-    // Validate input
-    // -------------------------
     if (req.method !== "POST") {
-      return res.status(405).json({
-        error: "Method not allowed",
-        example: { tripNo: "B01KJY" }
-      });
+      return res.status(405).json({ error: "Method not allowed" });
     }
 
-    const { tripNo } = req.body || {};
+    const { action, tripNo, task } = req.body || {};
 
-    if (!tripNo) {
-      return res.status(400).json({
-        error: "tripNo is required"
-      });
-    }
+    /* ------------------------------------------------ */
 
-    // -------------------------
-    // LOGIN
-    // -------------------------
-    const login = await fmsLogin();
+    // ✅ GET TASKS
+    if (action === "getTasks") {
 
-    // Tokens from oauth login
-    const AUTH_TOKEN = login.access_token;
-    const REFRESH = login.refresh_token; // unused now
-
-    if (!AUTH_TOKEN) {
-      throw new Error("Login succeeded but no access token returned.");
-    }
-
-    // -------------------------
-    // FETCH TASKS
-    // -------------------------
-    const TASK_URL =
-      "https://fms.item.com/fms-platform-dispatch-management/TripDetail/GetTaskList" +
-      `?tripNo=${encodeURIComponent(tripNo.trim())}`;
-
-    const fmsRes = await fetch(TASK_URL, {
-      method: "GET",
-      headers: {
-        Accept: "application/json, text/plain, */*",
-        Authorization: `Bearer ${AUTH_TOKEN}`,
-        "fms-client": "FMS_WEB"
+      if (!tripNo) {
+        return res.status(400).json({ error: "tripNo required" });
       }
-    });
 
-    if (!fmsRes.ok) {
-      const t = await fmsRes.text();
+      const url =
+        `${TASKS_URL}?tripNo=${encodeURIComponent(tripNo)}`;
 
-      return res.status(fmsRes.status).json({
-        error: "FMS request failed",
-        http_status: fmsRes.status,
-        details: t
+      const resp = await fmsFetch(url, {
+        method: "GET"
+      });
+
+      if (!resp.ok) {
+        const t = await resp.text();
+        return res.status(resp.status).json({
+          error: "FMS request failed",
+          status: resp.status,
+          details: t
+        });
+      }
+
+      const json = await resp.json();
+
+      const raw = json?.data || [];
+
+      const tasks = raw.map(normalizeTask);
+
+      return res.json({
+        tripNo,
+        count: tasks.length,
+        tasks
       });
     }
 
-    const data = await fmsRes.json();
+    /* ------------------------------------------------ */
 
-    // -------------------------
-    // Validate result
-    // -------------------------
-    if (!data || !data.is_success || !Array.isArray(data.data)) {
-      return res.status(500).json({
-        error: "Unexpected FMS response",
-        raw: data
+    // ✅ CHECK IN TASK
+    if (action === "checkin") {
+
+      if (!tripNo || !task?.taskNo) {
+        return res.status(400).json({
+          error: "tripNo + task.taskNo required"
+        });
+      }
+
+      const resp = await fmsFetch(CHECKIN_URL, {
+        method: "POST",
+        body: JSON.stringify({
+          tripNo,
+          taskNo: task.taskNo
+        })
+      });
+
+      return res.json({
+        success: resp.ok,
+        status: resp.status,
+        taskNo: task.taskNo
       });
     }
 
-    // -------------------------
-    // Normalize tasks
-    // -------------------------
-    const tasks = data.data.map(task => ({
-      do: task.order_no || "",
-      pro: task.tracking_no || "",
-      pu: task.pu_no || "",
-      taskNo: task.task_no,
-      type: task.task_type_text || "",
-      status: task.status_text || "",
-      complete: String(task.status_text)
-        .toLowerCase()
-        .includes("complete")
-    }));
+    /* ------------------------------------------------ */
 
-    // -------------------------
-    // Final Response
-    // -------------------------
-    return res.status(200).json({
-      tripNo,
-      taskCount: tasks.length,
-      tasks
+    // ✅ UNDO CHECKIN
+    if (action === "undo") {
+
+      if (!tripNo || !task?.taskNo) {
+        return res.status(400).json({
+          error: "tripNo + task.taskNo required"
+        });
+      }
+
+      const resp = await fmsFetch(UNDO_URL, {
+        method: "POST",
+        body: JSON.stringify({
+          tripNo,
+          taskNo: task.taskNo
+        })
+      });
+
+      return res.json({
+        success: resp.ok,
+        status: resp.status,
+        taskNo: task.taskNo
+      });
+    }
+
+    /* ------------------------------------------------ */
+
+    return res.status(400).json({
+      error: "Unknown action"
     });
 
   } catch (err) {
 
-    console.error("FMS BOT ERROR:", err);
+    console.error("🔥 FMS BOT ERROR:", err);
 
     return res.status(500).json({
       error: "Internal server error",
-      message: err.message
+      message: err.message || String(err)
     });
-
   }
 }

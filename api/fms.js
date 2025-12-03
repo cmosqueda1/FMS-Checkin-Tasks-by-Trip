@@ -1,12 +1,8 @@
 // /api/fms.js
 // Trip Check-In Bot backend
-// OAuth login + FMS login + NO COOKIE MERGING (Fix B)
+// OAuth login + FMS login
+// Pass raw FMS login cookies EXACTLY as returned. No merging, no filtering.
 
-import { parse } from "cookie";
-
-/* ================================
-   CONFIG
-================================ */
 const OAUTH_URL = "https://id.item.com/auth/realms/ITEM/protocol/openid-connect/token";
 const FMS_BASE  = "https://fms.item.com";
 
@@ -18,41 +14,23 @@ const FMS_UNDO_URL       = `${FMS_BASE}/fms-platform-dispatch-management/TripDet
 const FMS_CLIENT = "FMS_WEB";
 const FMS_COMPANY_ID = "SBFH";
 
+// ENV CREDS
 const FMS_USER = process.env.FMS_USER;
 const FMS_PASS = process.env.FMS_PASS;
 
-// Cached tokens
+// Cache
 let OAUTH_TOKEN = null;
 let OAUTH_EXP   = 0;
+
 let FMS_TOKEN   = null;
 let FMS_EXP     = 0;
 
-// Only store FMS cookies (Fix B)
-let FMS_COOKIES = "";
+let RAW_FMS_COOKIES = "";   // <-- store EXACT cookies returned from login
 
 /* ================================
    HELPERS
 ================================ */
-function clean(val) {
-  return val == null ? "" : String(val).trim();
-}
-
-function extractCookies(resp) {
-  const raw = resp.headers.get("set-cookie");
-  if (!raw) return [];
-
-  // Split safely on cookie boundaries
-  return raw.split(/,(?=\S+=)/g).map(c => c.trim());
-}
-
-function convertCookieArray(arr) {
-  return arr.map(c => {
-    const parsed = parse(c);
-    const name = Object.keys(parsed)[0];
-    if (!name) return null;
-    return `${name}=${parsed[name]}`;
-  }).filter(Boolean).join("; ");
-}
+const clean = (v) => (v == null ? "" : String(v).trim());
 
 /* ================================
    OAUTH LOGIN
@@ -73,21 +51,23 @@ async function loginOAuth(force = false) {
     body: params,
   });
 
-  if (!resp.ok) throw new Error(`OAuth login failed: HTTP ${resp.status}`);
+  if (!resp.ok) throw new Error(`OAuth login failed ${resp.status}`);
 
-  const data = await resp.json();
-  OAUTH_TOKEN = data.access_token;
-  OAUTH_EXP   = Date.now() + (data.expires_in - 60) * 1000; // 60s safety
+  const json = await resp.json();
+  OAUTH_TOKEN = json.access_token;
+  OAUTH_EXP = Date.now() + (json.expires_in - 60) * 1000;
 
   return OAUTH_TOKEN;
 }
 
 /* ================================
-   FMS LOGIN  (Fix B – only keep FMS cookies)
+   FMS LOGIN – STORE RAW COOKIES
 ================================ */
 async function loginFms(force = false) {
   const now = Date.now();
-  if (!force && FMS_TOKEN && now < FMS_EXP) return { token: FMS_TOKEN, cookies: FMS_COOKIES };
+  if (!force && FMS_TOKEN && now < FMS_EXP) {
+    return { token: FMS_TOKEN, cookies: RAW_FMS_COOKIES };
+  }
 
   const resp = await fetch(FMS_LOGIN_URL, {
     method: "POST",
@@ -95,37 +75,43 @@ async function loginFms(force = false) {
       "fms-client": FMS_CLIENT,
       "Content-Type": "application/json"
     },
-    body: JSON.stringify({ account: FMS_USER, password: FMS_PASS })
+    body: JSON.stringify({
+      account: FMS_USER,
+      password: FMS_PASS
+    })
   });
 
+  const rawText = await resp.text();
   if (!resp.ok) {
-    const text = await resp.text().catch(() => "");
-    throw new Error(`FMS login failed: HTTP ${resp.status}: ${text}`);
+    throw new Error(`FMS login failed: ${resp.status} ${rawText}`);
   }
 
-  const data = await resp.json();
+  let json;
+  try { json = JSON.parse(rawText); }
+  catch { throw new Error("FMS login JSON parse error: " + rawText); }
 
   FMS_TOKEN =
-    data.token ||
-    data?.data?.token ||
-    data?.result?.token ||
+    json.token ||
+    json?.data?.token ||
+    json?.result?.token ||
     "";
 
-  if (!FMS_TOKEN) {
-    throw new Error("FMS login returned no token");
-  }
+  if (!FMS_TOKEN) throw new Error("FMS login returned no token");
+
+  // Extract raw cookies EXACTLY as returned
+  const cookies = resp.headers.raw()["set-cookie"] || [];
+  RAW_FMS_COOKIES = cookies.join("; ");   // <-- DO NOT PARSE OR FILTER
 
   FMS_EXP = Date.now() + 55 * 60 * 1000;
 
-  // Only store cookies returned by THIS login, no merging
-  const cookies = extractCookies(resp);
-  FMS_COOKIES = convertCookieArray(cookies);
-
-  return { token: FMS_TOKEN, cookies: FMS_COOKIES };
+  return {
+    token: FMS_TOKEN,
+    cookies: RAW_FMS_COOKIES
+  };
 }
 
 /* ================================
-   DISPATCH REQUEST WRAPPER
+   AUTH WRAPPER FOR ALL CALLS
 ================================ */
 async function dispatchFetch(url, opts = {}, retry = true) {
   const oauth = await loginOAuth();
@@ -136,7 +122,7 @@ async function dispatchFetch(url, opts = {}, retry = true) {
     "fms-token": fms.token,
     "fms-client": FMS_CLIENT,
     "company-id": FMS_COMPANY_ID,
-    "cookie": FMS_COOKIES,        // FIX B — FMS cookies only
+    "cookie": RAW_FMS_COOKIES,   // <-- EXACT LOGIN COOKIES PASSED RAW
     "accept": "application/json, text/plain, */*",
     "referer": "https://fms.item.com/",
     "user-agent": "Mozilla/5.0",
@@ -145,8 +131,8 @@ async function dispatchFetch(url, opts = {}, retry = true) {
 
   const resp = await fetch(url, { ...opts, headers });
 
+  // Retry on auth failure
   if ((resp.status === 401 || resp.status === 403) && retry) {
-    // Refresh tokens + cookies
     await loginOAuth(true);
     await loginFms(true);
     return dispatchFetch(url, opts, false);
@@ -156,7 +142,7 @@ async function dispatchFetch(url, opts = {}, retry = true) {
 }
 
 /* ================================
-   TASK NORMALIZER
+   NORMALIZE TASKS
 ================================ */
 function normalizeTask(t) {
   const status = clean(t.status_text || t.status);
@@ -186,37 +172,33 @@ export default async function handler(req, res) {
   }
 
   const { action } = req.body || {};
+
   try {
     switch (action) {
 
-      /* ---------------------------
-         GET TASKS
-      -----------------------------*/
       case "getTasks": {
         const { tripNo } = req.body;
         if (!tripNo) return res.status(400).json({ error: "tripNo required" });
 
         const url = `${FMS_TRIP_TASKS_URL}?tripNo=${encodeURIComponent(tripNo)}`;
         const resp = await dispatchFetch(url, { method: "GET" });
-        const text = await resp.text();
+        const txt = await resp.text();
 
         if (!resp.ok) {
-          return res.status(500).json({ error: "FMS request failed", details: text });
+          return res.status(500).json({ error: "FMS request failed", details: txt });
         }
 
-        let data;
-        try { data = JSON.parse(text); }
-        catch { return res.status(500).json({ error: "Invalid JSON", raw: text }); }
+        let json = {};
+        try { json = JSON.parse(txt); }
+        catch { return res.status(500).json({ error: "Invalid JSON", raw: txt }); }
 
-        const rawTasks = Array.isArray(data?.tasks) ? data.tasks : [];
-        const tasks = rawTasks.map(normalizeTask);
-
-        return res.status(200).json({ tripNo, tasks });
+        const raw = json?.tasks || [];
+        return res.status(200).json({
+          tripNo,
+          tasks: raw.map(normalizeTask)
+        });
       }
 
-      /* ---------------------------
-         CHECK-IN
-      -----------------------------*/
       case "checkin": {
         const { tripNo, task } = req.body;
         if (!tripNo || !task?.taskNo)
@@ -230,14 +212,11 @@ export default async function handler(req, res) {
 
         return res.status(200).json({
           success: resp.ok,
-          taskNo: task.taskNo,
-          statusCode: resp.status
+          statusCode: resp.status,
+          taskNo: task.taskNo
         });
       }
 
-      /* ---------------------------
-         UNDO CHECK-IN
-      -----------------------------*/
       case "undo": {
         const { tripNo, task } = req.body;
         if (!tripNo || !task?.taskNo)
@@ -251,8 +230,8 @@ export default async function handler(req, res) {
 
         return res.status(200).json({
           success: resp.ok,
-          taskNo: task.taskNo,
-          statusCode: resp.status
+          statusCode: resp.status,
+          taskNo: task.taskNo
         });
       }
 
@@ -261,7 +240,7 @@ export default async function handler(req, res) {
     }
 
   } catch (err) {
-    console.error("FMS router error:", err);
+    console.error("FMS handler error:", err);
     return res.status(500).json({
       error: "Internal Server Error",
       details: err.message || String(err)

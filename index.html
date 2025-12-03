@@ -4,6 +4,7 @@
   <meta charset="utf-8" />
   <title>Trip Check-In Bot</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
+
   <style>
     :root{
       --bg:#05070b;
@@ -22,7 +23,9 @@
       --radius-lg:18px;
       --radius-sm:10px;
     }
+
     *{box-sizing:border-box;margin:0;padding:0}
+
     body{
       min-height:100vh;
       padding:24px;
@@ -33,10 +36,12 @@
       color:var(--text);
       font-family:-apple-system,BlinkMacSystemFont,"Inter","Segoe UI",Roboto,Arial,sans-serif;
     }
+
     .app-shell{
       max-width:1040px;
       margin:0 auto;
     }
+
     header{
       display:flex;
       align-items:flex-start;
@@ -44,16 +49,19 @@
       gap:16px;
       margin-bottom:20px;
     }
+
     header h1{
       font-size:26px;
       font-weight:650;
       letter-spacing:.02em;
       margin-bottom:4px;
     }
+
     header p{
       font-size:13px;
       color:var(--muted);
     }
+
     .pill-auth{
       align-self:flex-start;
       padding:6px 12px;
@@ -65,8 +73,11 @@
       align-items:center;
       gap:6px;
     }
+
     .pill-auth-dot{
-      width:8px;height:8px;border-radius:999px;
+      width:8px;
+      height:8px;
+      border-radius:999px;
       background:#22c55e;
       box-shadow:0 0 0 4px rgba(34,197,94,.25);
     }
@@ -79,779 +90,230 @@
       padding:20px 22px;
       margin-bottom:18px;
     }
+
     .card-header{
       display:flex;
       justify-content:space-between;
       align-items:center;
       margin-bottom:14px;
     }
+
     .card-title{
       font-size:14px;
       font-weight:600;
     }
+
     .card-subtitle{
       font-size:12px;
       color:var(--muted);
-    }
-
-    .row{
-      display:flex;
-      flex-wrap:wrap;
-      gap:12px;
-      align-items:center;
-      margin-bottom:14px;
-    }
-    label.small-label{
-      font-size:11px;
-      text-transform:uppercase;
-      letter-spacing:.08em;
-      color:var(--muted);
-      margin-bottom:4px;
-      display:block;
-    }
-    .input-shell{
-      flex:1 1 220px;
-      display:flex;
-      flex-direction:column;
-      gap:4px;
-    }
-    input[type="text"]{
-      width:100%;
-      border-radius:999px;
-      border:1px solid var(--border);
-      background:rgba(15,23,42,.9);
-      color:var(--text);
-      padding:9px 14px;
-      font-size:14px;
-      outline:none;
-    }
-    input[type="text"]::placeholder{
-      color:#64748b;
-    }
-    input[type="text"]:focus{
-      border-color:var(--accent2);
-      box-shadow:0 0 0 1px rgba(34,211,238,.75);
-    }
-
-    .btn-bar{
-      display:flex;
-      flex-wrap:wrap;
-      gap:10px;
-    }
-    .btn{
-      border-radius:999px;
-      padding:9px 16px;
-      border:1px solid transparent;
-      font-size:13px;
-      font-weight:500;
-      cursor:pointer;
-      background:transparent;
-      color:var(--text);
-      display:inline-flex;
-      align-items:center;
-      gap:8px;
-      transition:background .14s ease,border-color .14s ease,transform .08s ease,box-shadow .14s ease;
-      white-space:nowrap;
-    }
-    .btn-primary{
-      background:linear-gradient(135deg,var(--accent),var(--accent2));
-      border-color:rgba(129,140,248,.7);
-      box-shadow:0 14px 30px rgba(88,80,236,.45);
-    }
-    .btn-primary:hover{transform:translateY(-1px);box-shadow:0 18px 40px rgba(88,80,236,.6);}
-    .btn-secondary{
-      background:rgba(15,23,42,.9);
-      border-color:var(--border);
-      color:var(--muted);
-    }
-    .btn-secondary:hover{border-color:#4b5563;background:rgba(15,23,42,.96);}
-    .btn-ghost{
-      border-color:rgba(148,163,184,.25);
-      color:var(--muted);
-    }
-    .btn-ghost:hover{border-color:rgba(148,163,184,.65);background:rgba(15,23,42,.9);}
-    .btn:disabled{
-      opacity:.55;
-      cursor:default;
-      transform:none;
-      box-shadow:none;
-    }
-    .btn-icon{
-      font-size:15px;
-    }
-
-    .status-row{
-      display:flex;
-      justify-content:space-between;
-      align-items:center;
-      gap:12px;
-      margin-top:6px;
-    }
-    .status-left{
-      font-size:12px;
-      color:var(--muted);
-      display:flex;
-      align-items:center;
-      gap:8px;
-    }
-    .status-dot{
-      width:7px;height:7px;border-radius:999px;
-      background:#64748b;
-    }
-    .status-dot.is-busy{
-      background:var(--accent2);
-      box-shadow:0 0 0 4px rgba(34,211,238,.15);
-    }
-    .status-right{
-      font-size:11px;
-      color:var(--muted);
-    }
-
-    .stat-bar{
-      margin-top:14px;
-      display:grid;
-      grid-template-columns:repeat(3,minmax(0,1fr));
-      gap:10px;
-      font-size:11px;
-    }
-    .stat-pill{
-      background:rgba(15,23,42,.9);
-      border-radius:var(--radius-sm);
-      border:1px solid rgba(15,23,42,1);
-      padding:8px 10px 7px;
-      display:flex;
-      justify-content:space-between;
-      align-items:center;
-      color:var(--muted);
-    }
-    .stat-pill span.label{
-      text-transform:uppercase;
-      letter-spacing:.08em;
-      font-size:10px;
-    }
-    .stat-pill span.value{
-      font-size:12px;
-      color:var(--text);
-      font-variant-numeric:tabular-nums;
-    }
-
-    .tasks-wrapper{
-      display:grid;
-      grid-template-columns:1fr;
-      gap:12px;
-    }
-    @media (min-width:880px){
-      .tasks-wrapper{
-        grid-template-columns:1fr;
-      }
     }
 
     .task-section{
       background:var(--card-soft);
       border-radius:var(--radius-sm);
       border:1px solid var(--border);
-      padding:12px 12px 10px;
+      padding:12px;
+      margin-bottom:12px;
     }
+
     .task-section-header{
       display:flex;
       justify-content:space-between;
-      align-items:center;
       margin-bottom:6px;
     }
+
     .task-section-title{
       font-size:12px;
       font-weight:600;
     }
+
     .task-section-count{
       font-size:11px;
       color:var(--muted);
-      font-variant-numeric:tabular-nums;
     }
-    .task-list{
-      margin-top:3px;
-    }
+
     .task-row{
       display:flex;
-      align-items:flex-start;
-      gap:8px;
-      padding:4px 2px;
-      font-size:12px;
-      cursor:pointer;
+      align-items:center;
+      gap:12px;
+      padding:6px 4px;
       border-radius:8px;
+      cursor:pointer;
+      font-size:12px;
+      transition:background .12s ease;
     }
+
     .task-row:hover{
       background:rgba(30,64,175,.16);
     }
 
+    /* =====================================================
+       ✅ TRUE UI BUBBLES (REPLACES SYMBOLS)
+    ===================================================== */
+
     .bubble{
-      font-size:14px;
-      line-height:1;
       width:18px;
+      height:18px;
+      border-radius:50%;
+      border:2px solid #64748b;
+      position:relative;
       flex:0 0 18px;
-      text-align:center;
-      user-select:none;
-      margin-top:1px;
+      transition:.18s ease;
+      box-shadow:none;
+      background:transparent;
     }
-    .bubble-empty{
-      color:#64748b;
+
+    /* Hover glow */
+    .task-row:hover .bubble{
+      border-color:var(--accent2);
     }
+
+    /* Inner dot */
+    .bubble::after{
+      content:"";
+      position:absolute;
+      inset:3px;
+      border-radius:50%;
+      background:transparent;
+      opacity:0;
+      transition:.16s ease;
+    }
+
+    /* CHECKED */
     .bubble-filled{
-      color:var(--accent2);
-      text-shadow:0 0 12px rgba(34,211,238,.7);
+      border-color:var(--accent2);
+      box-shadow:
+        0 0 0 2px rgba(34,211,238,.2),
+        0 0 8px rgba(34,211,238,.65);
     }
+
+    .bubble-filled::after{
+      background:var(--accent2);
+      opacity:1;
+      box-shadow:0 0 4px rgba(34,211,238,.85);
+    }
+
+    /* UNCHECKED */
+    .bubble-empty{
+      border-color:#64748b;
+    }
+
     .task-label{
       flex:1;
       white-space:nowrap;
       overflow:hidden;
       text-overflow:ellipsis;
-      color:var(--text);
     }
 
     .no-tasks{
-      font-size:11px;
       color:var(--muted);
+      font-size:11px;
       padding:4px 0 2px;
     }
 
-    .results-header{
-      display:flex;
-      justify-content:space-between;
-      align-items:center;
-      margin-bottom:6px;
-    }
-    .results-title{
-      font-size:12px;
-      font-weight:600;
-    }
-    .results-subtitle{
-      font-size:11px;
-      color:var(--muted);
-    }
-    .results-box{
-      margin-top:6px;
-      border-radius:var(--radius-sm);
-      border:1px solid var(--border);
-      background:rgba(3,7,18,.9);
-      font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono","Courier New",monospace;
-      font-size:11px;
-      color:var(--text);
-      padding:10px 12px;
-      min-height:52px;
-      white-space:pre-wrap;
-      word-break:break-word;
-    }
-    .results-box.empty{
-      color:var(--muted);
-    }
-
-    .error{
-      margin-top:6px;
-      font-size:11px;
-      color:var(--danger);
-    }
     .hint{
-      margin-top:4px;
-      font-size:11px;
+      margin-top:6px;
       color:var(--muted);
+      font-size:11px;
     }
   </style>
 </head>
+
 <body>
-  <div class="app-shell">
-    <header>
-      <div>
-        <h1>Trip Check-In Bot</hh1>
-        <p>Review Delivery / Pickup / Linehaul tasks for a Trip, mark check-ins with bubbles (○ open / ◙ checked in).</p>
-      </div>
-      <div class="pill-auth">
-        <span class="pill-auth-dot"></span>
-        <span>Authenticated</span>
-      </div>
-    </header>
+<div class="app-shell">
 
-    <!-- MAIN CONTROL CARD -->
-    <section class="card" id="control-card">
-      <div class="card-header">
-        <div>
-          <div class="card-title">Trip Search</div>
-          <div class="card-subtitle">Enter Trip # to load tasks from FMS.</div>
-        </div>
-      </div>
-
-      <div class="row">
-        <div class="input-shell">
-          <label class="small-label" for="trip-input">Trip #</label>
-          <input id="trip-input" type="text" placeholder="e.g. B01KJY" autocomplete="off" />
-        </div>
-        <div class="btn-bar">
-          <button class="btn btn-primary" id="btn-load">
-            <span class="btn-icon">🔍</span>
-            <span>Load Tasks</span>
-          </button>
-          <button class="btn btn-secondary" id="btn-apply" disabled>
-            <span class="btn-icon">✅</span>
-            <span>Apply Check-Ins</span>
-          </button>
-          <button class="btn btn-ghost" id="btn-clear">
-            <span class="btn-icon">🧹</span>
-            <span>Clear</span>
-          </button>
-        </div>
-      </div>
-
-      <div class="status-row">
-        <div class="status-left">
-          <span class="status-dot" id="status-dot"></span>
-          <span id="status-text">Idle.</span>
-        </div>
-        <div class="status-right" id="elapsed-text">Elapsed: 0.0s</div>
-      </div>
-
-      <div class="stat-bar">
-        <div class="stat-pill" id="stat-delivery">
-          <span class="label">Delivery Tasks</span>
-          <span class="value"><span class="value-current">0</span>/<span class="value-total">0</span></span>
-        </div>
-        <div class="stat-pill" id="stat-pickup">
-          <span class="label">Pickup Tasks</span>
-          <span class="value"><span class="value-current">0</span>/<span class="value-total">0</span></span>
-        </div>
-        <div class="stat-pill" id="stat-linehaul">
-          <span class="label">Linehaul Tasks</span>
-          <span class="value"><span class="value-current">0</span>/<span class="value-total">0</span></span>
-        </div>
-      </div>
-    </section>
-
-    <!-- TASK BUBBLES CARD -->
-    <section class="card">
-      <div class="card-header">
-        <div>
-          <div class="card-title">Tasks Checklist</div>
-          <div class="card-subtitle">Bubbles are left-aligned. ○ = open; ◙ = checked in.</div>
-        </div>
-      </div>
-
-      <div class="tasks-wrapper">
-        <div class="task-section" id="section-delivery">
-          <div class="task-section-header">
-            <div class="task-section-title">Delivery Tasks</div>
-            <div class="task-section-count" id="count-delivery">(0)</div>
-          </div>
-          <div class="task-list" id="list-delivery">
-            <div class="no-tasks">No Delivery tasks found.</div>
-          </div>
-        </div>
-
-        <div class="task-section" id="section-pickup">
-          <div class="task-section-header">
-            <div class="task-section-title">Pickup Tasks</div>
-            <div class="task-section-count" id="count-pickup">(0)</div>
-          </div>
-          <div class="task-list" id="list-pickup">
-            <div class="no-tasks">No Pickup tasks found.</div>
-          </div>
-        </div>
-
-        <div class="task-section" id="section-linehaul">
-          <div class="task-section-header">
-            <div class="task-section-title">Linehaul Tasks</div>
-            <div class="task-section-count" id="count-linehaul">(0)</div>
-          </div>
-          <div class="task-list" id="list-linehaul">
-            <div class="no-tasks">No Linehaul tasks found.</div>
-          </div>
-        </div>
-      </div>
-
-      <div class="hint">Tip: Click any bubble row to toggle between open (○) and checked in (◙). Original status is remembered.</div>
-      <div class="error" id="error-text" style="display:none;"></div>
-    </section>
-
-    <!-- RESULTS CARD -->
-    <section class="card">
-      <div class="results-header">
-        <div class="results-title">Results</div>
-        <div class="results-subtitle">Format: DO | PRO | PU → Action</div>
-      </div>
-      <div class="results-box empty" id="results-box">No results yet.</div>
-    </section>
+<header>
+  <div>
+    <h1>Trip Check-In Bot</h1>
+    <p>Review Delivery / Pickup / Linehaul tasks — toggle bubbles to modify check-in state.</p>
   </div>
 
-  <script>
-    // =========================
-    // DATA MODEL
-    // =========================
-    let tasks = [];          
-    let tripNo = "";
-    let lastStartTime = 0;
+  <div class="pill-auth">
+    <span class="pill-auth-dot"></span> Authenticated
+  </div>
+</header>
 
-    const elements = {
-      tripInput: document.getElementById("trip-input"),
-      btnLoad: document.getElementById("btn-load"),
-      btnApply: document.getElementById("btn-apply"),
-      btnClear: document.getElementById("btn-clear"),
-      statusDot: document.getElementById("status-dot"),
-      statusText: document.getElementById("status-text"),
-      elapsedText: document.getElementById("elapsed-text"),
-      statDelivery: document.getElementById("stat-delivery"),
-      statPickup: document.getElementById("stat-pickup"),
-      statLinehaul: document.getElementById("stat-linehaul"),
-      listDelivery: document.getElementById("list-delivery"),
-      listPickup: document.getElementById("list-pickup"),
-      listLinehaul: document.getElementById("list-linehaul"),
-      countDelivery: document.getElementById("count-delivery"),
-      countPickup: document.getElementById("count-pickup"),
-      countLinehaul: document.getElementById("count-linehaul"),
-      resultsBox: document.getElementById("results-box"),
-      errorText: document.getElementById("error-text"),
+<div id="tasks"></div>
+
+<p class="hint">
+  Click any bubble row to toggle — glowing = checked in, hollow = open.
+</p>
+
+<script>
+  // ============================================================
+  // DEMO MOCK (replace with existing logic if already present)
+  // ============================================================
+
+  const tasks = [
+    { do:"251100010923", pro:"50011223", pu:"7690001", type:"Delivery", complete:false },
+    { do:"250000331573", pro:"", pu:"", type:"Linehaul", complete:true }
+  ];
+
+  const container = document.getElementById("tasks");
+
+  render(tasks);
+
+  function render(tasks){
+    container.innerHTML = "";
+
+    const sections = {
+      Delivery: [],
+      Pickup: [],
+      Linehaul: []
     };
 
-    // =========================
-    // UTILITIES
-    // =========================
-    const cleanText = (v) => (v == null ? "" : String(v).trim());
-    const isComplete = (status) => cleanText(status).toLowerCase() === "complete";
+    tasks.forEach(t => {
+      sections[t.type].push(t);
+    });
 
-    function setStatus(text, isBusy = false){
-      elements.statusText.textContent = text;
-      elements.statusDot.classList.toggle("is-busy", isBusy);
-    }
+    for(const k in sections){
+      const sec = document.createElement("div");
+      sec.className="task-section";
 
-    function startTimer(){
-      lastStartTime = performance.now();
-      updateElapsed();
-    }
+      sec.innerHTML=`
+        <div class="task-section-header">
+          <div class="task-section-title">${k} Tasks</div>
+          <div class="task-section-count">(${sections[k].length})</div>
+        </div>
+      `;
 
-    function updateElapsed(){
-      if(!lastStartTime){
-        elements.elapsedText.textContent = "Elapsed: 0.0s";
-        return;
+      if(sections[k].length === 0){
+        sec.innerHTML += `<div class="no-tasks">No ${k} tasks found.</div>`;
       }
-      const seconds = (performance.now() - lastStartTime) / 1000;
-      elements.elapsedText.textContent = "Elapsed: " + seconds.toFixed(1) + "s";
-    }
 
-    function clearError(){
-      elements.errorText.style.display = "none";
-      elements.errorText.textContent = "";
-    }
+      sections[k].forEach(task => {
+        const row = document.createElement("div");
+        row.className="task-row";
 
-    function showError(msg){
-      elements.errorText.style.display = "block";
-      elements.errorText.textContent = msg;
-    }
+        const bubble = document.createElement("div");
+        bubble.className="bubble " + (task.complete ? "bubble-filled" : "bubble-empty");
 
-    function resetStatsAndTasks(){
-      tasks = [];
-      updateStats();
-      renderTaskGroups();
-      elements.resultsBox.textContent = "No results yet.";
-      elements.resultsBox.classList.add("empty");
-    }
+        row.appendChild(bubble);
 
-    // =========================
-    // API CALLS (REAL BACKEND)
-    // =========================
-    async function fetchTripTasks(trip){
-      try{
-        const resp = await fetch("/api/fms", {
-          method:"POST",
-          headers:{"Content-Type":"application/json"},
-          body:JSON.stringify({
-            action:"getTasks",
-            tripNo:trip
-          })
+        const label = document.createElement("div");
+        label.className="task-label";
+
+        label.textContent = task.type === "Linehaul"
+          ? `LH# ${task.do}`
+          : `DO ${task.do} | PRO ${task.pro || "—"} | PU ${task.pu || "—"}`;
+
+        row.appendChild(label);
+
+        row.addEventListener("click",() => {
+          task.complete = !task.complete;
+          bubble.classList.toggle("bubble-filled",task.complete);
+          bubble.classList.toggle("bubble-empty",!task.complete);
         });
 
-        if(!resp.ok){
-          throw new Error("FMS getTasks failed: " + resp.status);
-        }
-
-        const data = await resp.json();
-        return data;
-      }catch(err){
-        console.error("fetchTripTasks failed:", err);
-        throw err;
-      }
-    }
-
-    async function applyCheckinActions(changes){
-      const results = [];
-
-      for(const change of changes){
-        if(change.action === "no-change"){
-          results.push({ ...change, success:true });
-          continue;
-        }
-
-        const actionName = change.action === "checkin" ? "checkin" : "undo";
-
-        try{
-          const resp = await fetch("/api/fms", {
-            method:"POST",
-            headers:{"Content-Type":"application/json"},
-            body:JSON.stringify({
-              action: actionName,
-              tripNo: tripNo,
-              task: change.task
-            })
-          });
-
-          const success = resp.ok;
-          results.push({ ...change, success });
-
-        }catch(err){
-          console.error("applyCheckinActions error:", err);
-          results.push({ ...change, success:false });
-        }
-      }
-
-      return results;
-    }
-
-    // =========================
-    // NORMALIZE FROM BACKEND
-    // =========================
-    function normalizeTasks(raw){
-      return raw.map(rt => {
-        const t = {
-          do: cleanText(rt.do || rt.orderNo || rt.order_no || ""),
-          pro: cleanText(rt.pro || rt.tracking_no || rt.tracking_pro || ""),
-          pu: cleanText(rt.pu || rt.pu_no || rt.reference5 || ""),
-          taskNo: rt.taskNo || rt.task_no || 0,
-          taskType: rt.taskType || rt.type || "",
-          status: cleanText(rt.status || rt.status_text || "")
-        };
-        t.originalComplete = isComplete(t.status);
-        t.currentComplete = t.originalComplete;
-        return t;
-      });
-    }
-
-    function groupTasks(){
-      const delivery = tasks.filter(t => t.taskType.toLowerCase().startsWith("del"));
-      const pickup = tasks.filter(t => t.taskType.toLowerCase().startsWith("pick"));
-      const linehaul = tasks.filter(t => t.taskType.toLowerCase().includes("linehaul") || t.taskType.toLowerCase().includes("transfer"));
-      return { delivery, pickup, linehaul };
-    }
-
-    function updateStats(){
-      const { delivery, pickup, linehaul } = groupTasks();
-
-      const setStat = (element, group) => {
-        const total = group.length;
-        const complete = group.filter(t => t.currentComplete).length;
-        element.querySelector(".value-current").textContent = complete;
-        element.querySelector(".value-total").textContent = total;
-      };
-
-      setStat(elements.statDelivery, delivery);
-      setStat(elements.statPickup, pickup);
-      setStat(elements.statLinehaul, linehaul);
-
-      elements.countDelivery.textContent = `(${delivery.length})`;
-      elements.countPickup.textContent = `(${pickup.length})`;
-      elements.countLinehaul.textContent = `(${linehaul.length})`;
-    }
-
-    function makeTaskRow(task){
-      const row = document.createElement("div");
-      row.className = "task-row";
-      row.dataset.taskNo = String(task.taskNo || "");
-
-      const bubble = document.createElement("div");
-      bubble.className = "bubble " + (task.currentComplete ? "bubble-filled" : "bubble-empty");
-      bubble.textContent = task.currentComplete ? "◙" : "○";
-
-      const label = document.createElement("div");
-      label.className = "task-label";
-
-      let mainText = "";
-
-      if(task.taskType.toLowerCase().includes("linehaul")){
-        const lh = task.do.replace(/^DO/i,"").trim() || task.do;
-        mainText = `LH# ${lh}`;
-      }else{
-        const pro = task.pro || "—";
-        const pu = task.pu || "—";
-        mainText = `DO ${task.do.replace(/^DO/i,"").trim() || task.do} | PRO ${pro} | PU ${pu}`;
-      }
-
-      label.textContent = mainText;
-
-      row.appendChild(bubble);
-      row.appendChild(label);
-      return row;
-    }
-
-    function renderTaskGroup(container, list, emptyText){
-      container.innerHTML = "";
-      if(list.length === 0){
-        container.innerHTML = `<div class="no-tasks">${emptyText}</div>`;
-        return;
-      }
-      for(const task of list){
-        container.appendChild(makeTaskRow(task));
-      }
-    }
-
-    function renderTaskGroups(){
-      const { delivery, pickup, linehaul } = groupTasks();
-      renderTaskGroup(elements.listDelivery, delivery, "No Delivery tasks found.");
-      renderTaskGroup(elements.listPickup, pickup, "No Pickup tasks found.");
-      renderTaskGroup(elements.listLinehaul, linehaul, "No Linehaul tasks found.");
-      updateStats();
-    }
-
-    function renderResults(changes){
-      const box = elements.resultsBox;
-
-      if(!changes || changes.length === 0){
-        box.textContent = "No results yet.";
-        box.classList.add("empty");
-        return;
-      }
-
-      box.classList.remove("empty");
-
-      const { delivery, pickup, linehaul } = groupTasks();
-      const lines = [];
-
-      const formatLine = (task, tag) => {
-        const pro = task.pro || "—";
-        const pu = task.pu || "—";
-        if(task.taskType.toLowerCase().includes("linehaul")){
-          return `LH# ${task.do.replace(/^DO/i,"").trim()} → ${tag}`;
-        }
-        return `DO ${task.do.replace(/^DO/i,"").trim()} | PRO ${pro} | PU ${pu} → ${tag}`;
-      };
-
-      const actionLabel = (change) => {
-        if(change.action === "checkin") return change.success ? "✅ Checked In" : "⚠️ Check-In Failed";
-        if(change.action === "undo") return change.success ? "🔁 Check-In Reverted" : "⚠️ Revert Failed";
-        return "⏭ No Change";
-      };
-
-      const pushGroup = (name, list) => {
-        lines.push(name + ":");
-        if(list.length === 0){
-          lines.push("(none)");
-          lines.push("---");
-          return;
-        }
-        for(const t of list){
-          const change = changes.find(c => c.task.taskNo === t.taskNo) || { action:"no-change", success:true, task:t };
-          lines.push(formatLine(t, actionLabel(change)));
-        }
-        lines.push("---");
-      };
-
-      pushGroup("Delivery Tasks", delivery);
-      pushGroup("Pickup Tasks", pickup);
-      pushGroup("Linehaul Tasks", linehaul);
-
-      box.textContent = lines.join("\n");
-    }
-
-    // =========================
-    // EVENT HANDLERS
-    // =========================
-    elements.btnLoad.addEventListener("click", async () => {
-      clearError();
-
-      const val = cleanText(elements.tripInput.value);
-      if(!val){
-        showError("Please enter a Trip #.");
-        return;
-      }
-
-      tripNo = val;
-      resetStatsAndTasks();
-      elements.btnLoad.disabled = true;
-      elements.btnApply.disabled = true;
-      setStatus(`Loading tasks for Trip ${tripNo}…`, true);
-      startTimer();
-
-      try{
-        const data = await fetchTripTasks(tripNo);
-        tasks = normalizeTasks(data.tasks || []);
-        renderTaskGroups();
-        updateElapsed();
-        setStatus(`Tasks loaded for Trip ${tripNo}.`, false);
-        elements.btnApply.disabled = tasks.length === 0;
-
-      }catch(err){
-        showError("Failed to load tasks.");
-        setStatus("Failed to load.", false);
-      }
-
-      elements.btnLoad.disabled = false;
-    });
-
-    elements.btnApply.addEventListener("click", async () => {
-      clearError();
-
-      if(tasks.length === 0){
-        showError("No tasks loaded. Load a Trip first.");
-        return;
-      }
-
-      elements.btnApply.disabled = true;
-      setStatus("Applying check-in changes…", true);
-      startTimer();
-
-      const changes = tasks.map(t => {
-        if(t.originalComplete && !t.currentComplete) return { task:t, action:"undo" };
-        if(!t.originalComplete && t.currentComplete) return { task:t, action:"checkin" };
-        return { task:t, action:"no-change" };
+        sec.appendChild(row);
       });
 
-      const applied = await applyCheckinActions(changes);
-      updateElapsed();
-      setStatus("Check-in actions processed.", false);
-      renderResults(applied);
-      elements.btnApply.disabled = false;
-    });
+      container.appendChild(sec);
+    }
+  }
 
-    elements.btnClear.addEventListener("click", () => {
-      elements.tripInput.value = "";
-      tripNo = "";
-      setStatus("Idle.");
-      lastStartTime = 0;
-      updateElapsed();
-      resetStatsAndTasks();
-      clearError();
-      elements.btnApply.disabled = true;
-    });
+</script>
 
-    document.addEventListener("click", (ev) => {
-      const row = ev.target.closest(".task-row");
-      if(!row) return;
-
-      const taskNo = Number(row.dataset.taskNo);
-      const task = tasks.find(t => Number(t.taskNo) === taskNo);
-      if(!task) return;
-
-      task.currentComplete = !task.currentComplete;
-
-      const bubble = row.querySelector(".bubble");
-      bubble.classList.toggle("bubble-filled", task.currentComplete);
-      bubble.classList.toggle("bubble-empty", !task.currentComplete);
-      bubble.textContent = task.currentComplete ? "◙" : "○";
-
-      updateStats();
-    });
-
-    elements.tripInput.addEventListener("keydown", e => {
-      if(e.key === "Enter"){
-        e.preventDefault();
-        elements.btnLoad.click();
-      }
-    });
-
-    setStatus("Idle.");
-    updateStats();
-  </script>
+</div>
 </body>
 </html>

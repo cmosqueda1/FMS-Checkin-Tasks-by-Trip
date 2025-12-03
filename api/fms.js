@@ -1,11 +1,7 @@
 // /api/fms.js
 // Trip Check-In Bot backend
-// Proven working FMS auth pattern
-// - Dual JWT authentication (token + third_party_token)
-// - Token caching + auto refresh
-// - NO OAuth
-// - NO Cookies
-// - Robust task parsing
+// Correct dual-JWT FMS authentication
+// Robust task parsing for ALL FMS payload shapes
 
 const FMS_BASE = "https://fms.item.com";
 
@@ -24,15 +20,14 @@ const FMS_UNDO_URL =
 const FMS_CLIENT = "FMS_WEB";
 const FMS_COMPANY_ID = "SBFH";
 
-// ENV credentials
 const FMS_USER = process.env.FMS_USER;
 const FMS_PASS = process.env.FMS_PASS;
 
 /* ================================
    TOKEN CACHE
 ================================ */
-let FMS_TOKEN = null;         // small JWT
-let FMS_AUTH_TOKEN = null;   // big RSA JWT
+let FMS_TOKEN = null;
+let FMS_AUTH_TOKEN = null;
 let FMS_TOKEN_TS = 0;
 const TOKEN_TTL_MS = 55 * 60 * 1000;
 
@@ -50,10 +45,7 @@ async function loginFms(force = false) {
     FMS_AUTH_TOKEN &&
     now - FMS_TOKEN_TS < TOKEN_TTL_MS
   ) {
-    return {
-      fmsToken: FMS_TOKEN,
-      authToken: FMS_AUTH_TOKEN
-    };
+    return { fmsToken: FMS_TOKEN, authToken: FMS_AUTH_TOKEN };
   }
 
   if (!FMS_USER || !FMS_PASS)
@@ -79,11 +71,7 @@ async function loginFms(force = false) {
   const json = await resp.json().catch(() => ({}));
   const data = json?.data || {};
 
-  const smallToken =
-    data.token ||
-    json.token ||
-    null;
-
+  const smallToken = data.token || json.token || null;
   const bigToken =
     data.third_party_token ||
     data.thirdPartyToken ||
@@ -96,10 +84,7 @@ async function loginFms(force = false) {
   FMS_AUTH_TOKEN = bigToken;
   FMS_TOKEN_TS = now;
 
-  return {
-    fmsToken: FMS_TOKEN,
-    authToken: FMS_AUTH_TOKEN
-  };
+  return { fmsToken: FMS_TOKEN, authToken: FMS_AUTH_TOKEN };
 }
 
 /* ================================
@@ -119,7 +104,7 @@ async function authHeaders() {
 }
 
 /* ================================
-   AUTH FETCH WITH RETRY
+   FETCH w/ RETRY
 ================================ */
 async function dispatchFetch(url, options = {}, retry = 0) {
   const headers = await authHeaders();
@@ -141,7 +126,7 @@ async function dispatchFetch(url, options = {}, retry = 0) {
 }
 
 /* ================================
-   NORMALIZE TASKS
+   TASK NORMALIZER
 ================================ */
 function normalizeTask(t) {
   const status = clean(t.status_text || t.status);
@@ -166,21 +151,20 @@ function normalizeTask(t) {
    MAIN HANDLER
 ================================ */
 export default async function handler(req, res) {
-  if (req.method !== "POST") {
+  if (req.method !== "POST")
     return res.status(405).json({ error: "Method not allowed" });
-  }
 
   const { action } = req.body || {};
 
   try {
+
     switch (action) {
 
-      // ================================
-      // GET TASKS
-      // ================================
+      /* ================================
+         GET TASKS
+      ================================ */
       case "getTasks": {
         const { tripNo } = req.body;
-
         if (!tripNo)
           return res.status(400).json({ error: "tripNo required" });
 
@@ -190,12 +174,11 @@ export default async function handler(req, res) {
         const resp = await dispatchFetch(url, { method: "GET" });
         const txt = await resp.text();
 
-        if (!resp.ok) {
+        if (!resp.ok)
           return res.status(500).json({
             error: "FMS request failed",
             details: txt
           });
-        }
 
         let json = {};
         try { json = JSON.parse(txt); }
@@ -206,11 +189,14 @@ export default async function handler(req, res) {
           });
         }
 
-        // ✅ Handles all known FMS response shapes
+        // ✅ Final, correct extraction
         const raw =
           json?.data?.tasks ||
+          json?.data?.list ||
           json?.result?.tasks ||
+          json?.result?.rows ||
           json?.tasks ||
+          json?.rows ||
           json?.list ||
           [];
 
@@ -220,12 +206,11 @@ export default async function handler(req, res) {
         });
       }
 
-      // ================================
-      // CHECK IN TASK
-      // ================================
+      /* ================================
+         CHECK-IN
+      ================================ */
       case "checkin": {
         const { tripNo, task } = req.body;
-
         if (!tripNo || !task?.taskNo)
           return res.status(400).json({
             error: "tripNo and task.taskNo required"
@@ -247,12 +232,11 @@ export default async function handler(req, res) {
         });
       }
 
-      // ================================
-      // UNDO CHECK IN
-      // ================================
+      /* ================================
+         UNDO
+      ================================ */
       case "undo": {
         const { tripNo, task } = req.body;
-
         if (!tripNo || !task?.taskNo)
           return res.status(400).json({
             error: "tripNo and task.taskNo required"
@@ -280,7 +264,6 @@ export default async function handler(req, res) {
 
   } catch (err) {
     console.error("FMS handler error:", err);
-
     return res.status(500).json({
       error: "Internal Server Error",
       details: err.message || String(err)

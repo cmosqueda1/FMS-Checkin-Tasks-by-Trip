@@ -1,138 +1,154 @@
 // fms.js
-// Unified FMS task loader for Trip Check-in Bot
-// Uses active browser session cookies / tokens
-// Endpoint:
-//   GET https://fms.item.com/fms-platform-dispatch-management/TripDetail/GetTaskList?tripNo=XXXX
+// Unified FMS Task Loader – FULL LOGIN FLOW
+//
+// Requires environment variables set in Vercel:
+//   FMS_USER = your FMS username
+//   FMS_PASS = your FMS password
+//
+// Flow:
+//   1) Login to FMS
+//   2) Capture JWT + fms-token + company-id
+//   3) Call GetTaskList for Trip
+//   4) Normalize results
+
+// --------------------------------------------------
+
+async function fmsLogin() {
+  const LOGIN_URL = "https://id.item.com/connect/token";
+
+  const params = new URLSearchParams({
+    grant_type: "password",
+    client_id: "fms all",
+    username: process.env.FMS_USER,
+    password: process.env.FMS_PASS
+  });
+
+  const res = await fetch(LOGIN_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded"
+    },
+    body: params.toString()
+  });
+
+  if (!res.ok) {
+    const txt = await res.text();
+    throw new Error(`FMS login failed: ${txt}`);
+  }
+
+  return await res.json();
+}
+
+
+// --------------------------------------------------
+// API Handler
+// --------------------------------------------------
 
 export default async function handler(req, res) {
+
   try {
 
-    // ========================
-    // METHOD VALIDATION
-    // ========================
+    // -------------------------
+    // Validate input
+    // -------------------------
     if (req.method !== "POST") {
       return res.status(405).json({
-        error: "Method not allowed. Use POST.",
+        error: "Method not allowed",
         example: { tripNo: "B01KJY" }
       });
     }
 
-    // ========================
-    // INPUT VALIDATION
-    // ========================
     const { tripNo } = req.body || {};
 
-    if (!tripNo || typeof tripNo !== "string") {
+    if (!tripNo) {
       return res.status(400).json({
-        error: "tripNo is required",
-        example: { tripNo: "B01KJY" }
+        error: "tripNo is required"
       });
     }
 
-    // ========================
-    // CALL REAL FMS API
-    // ========================
-    const FMS_URL =
+    // -------------------------
+    // LOGIN
+    // -------------------------
+    const login = await fmsLogin();
+
+    // Tokens from oauth login
+    const AUTH_TOKEN = login.access_token;
+    const REFRESH = login.refresh_token; // unused now
+
+    if (!AUTH_TOKEN) {
+      throw new Error("Login succeeded but no access token returned.");
+    }
+
+    // -------------------------
+    // FETCH TASKS
+    // -------------------------
+    const TASK_URL =
       "https://fms.item.com/fms-platform-dispatch-management/TripDetail/GetTaskList" +
       `?tripNo=${encodeURIComponent(tripNo.trim())}`;
 
-    const response = await fetch(FMS_URL, {
+    const fmsRes = await fetch(TASK_URL, {
       method: "GET",
-
-      // ✅ REQUIRED
-      // Sends the active browser session cookies:
-      // fms-token, authorization, company-id, etc.
-      credentials: "include",
-
       headers: {
-        accept: "application/json, text/plain, */*"
+        Accept: "application/json, text/plain, */*",
+        Authorization: `Bearer ${AUTH_TOKEN}`,
+        "fms-client": "FMS_WEB"
       }
     });
 
-    // ========================
-    // NETWORK FAIL HANDLING
-    // ========================
-    if (!response.ok) {
-      const text = await response.text();
+    if (!fmsRes.ok) {
+      const t = await fmsRes.text();
 
-      return res.status(response.status).json({
+      return res.status(fmsRes.status).json({
         error: "FMS request failed",
-        http_status: response.status,
-        details: text
+        http_status: fmsRes.status,
+        details: t
       });
     }
 
-    const fms = await response.json();
+    const data = await fmsRes.json();
 
-    // ========================
-    // RESPONSE VALIDATION
-    // ========================
-    if (!fms || fms.is_success !== true || !Array.isArray(fms.data)) {
+    // -------------------------
+    // Validate result
+    // -------------------------
+    if (!data || !data.is_success || !Array.isArray(data.data)) {
       return res.status(500).json({
-        error: "Invalid FMS response format",
-        raw: fms
+        error: "Unexpected FMS response",
+        raw: data
       });
     }
 
-    // ========================
-    // NORMALIZE TASKS
-    // ========================
-    const tasks = fms.data.map(task => {
+    // -------------------------
+    // Normalize tasks
+    // -------------------------
+    const tasks = data.data.map(task => ({
+      do: task.order_no || "",
+      pro: task.tracking_no || "",
+      pu: task.pu_no || "",
+      taskNo: task.task_no,
+      type: task.task_type_text || "",
+      status: task.status_text || "",
+      complete: String(task.status_text)
+        .toLowerCase()
+        .includes("complete")
+    }));
 
-      const doNum =
-        task.order_no ||
-        task.shipment_order_no ||
-        "";
-
-      const proNum =
-        task.tracking_no ||
-        task.invoice_pro ||
-        "";
-
-      const puNum =
-        task.pu_no ||
-        "";
-
-      const taskType =
-        task.task_type_text ||
-        "";
-
-      const status =
-        task.status_text ||
-        "";
-
-      return {
-        do: doNum,
-        pro: proNum,
-        pu: puNum,
-
-        // Internal FMS identifiers
-        taskNo: task.task_no,
-
-        // Classification
-        type: taskType,
-
-        // Completion state
-        status: status,
-        complete: status.toLowerCase().includes("complete")
-      };
-    });
-
-    // ========================
-    // FINAL RESPONSE
-    // ========================
+    // -------------------------
+    // Final Response
+    // -------------------------
     return res.status(200).json({
-      tripNo: tripNo.trim(),
+      tripNo,
       taskCount: tasks.length,
       tasks
     });
 
   } catch (err) {
-    console.error("FMS HANDLER ERROR:", err);
+
+    console.error("FMS BOT ERROR:", err);
 
     return res.status(500).json({
       error: "Internal server error",
       message: err.message
     });
+
   }
 }

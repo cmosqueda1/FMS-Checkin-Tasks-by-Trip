@@ -1,222 +1,195 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <title>Trip Check-In Bot</title>
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
+<meta charset="utf-8" />
+<title>Trip Check-In Bot</title>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
 
-  <style>
-    :root{
-      --bg:#05070b;
-      --card:#0f1420;
-      --card-soft:#111827;
-      --text:#e6edf6;
-      --muted:#93a4b7;
-      --accent:#7c3aed;
-      --accent-soft:#4c1d95;
-      --accent2:#22d3ee;
-      --border:#1f2933;
-      --danger:#ef4444;
-      --ok:#10b981;
-      --warn:#facc15;
-      --shadow:0 18px 45px rgba(0,0,0,.6);
-      --radius-lg:18px;
-      --radius-sm:10px;
-    }
+<style>
+:root{
+  --bg:#05070b;
+  --card:#0f1420;
+  --card-soft:#111827;
+  --text:#e6edf6;
+  --muted:#93a4b7;
+  --accent:#7c3aed;
+  --accent2:#22d3ee;
+  --border:#1f2933;
+  --danger:#ef4444;
+  --shadow:0 18px 45px rgba(0,0,0,.6);
+  --radius-lg:18px;
+  --radius-sm:10px;
+}
 
-    *{box-sizing:border-box;margin:0;padding:0}
+*{box-sizing:border-box;margin:0;padding:0}
+body{
+  min-height:100vh;
+  padding:24px;
+  background:
+    radial-gradient(950px 650px at 5% -10%, #1e293b 0%, transparent 60%),
+    radial-gradient(950px 650px at 110% 110%, #0f172a 0%, transparent 55%),
+    var(--bg);
+  color:var(--text);
+  font-family:-apple-system,BlinkMacSystemFont,"Inter","Segoe UI",Roboto,Arial,sans-serif;
+}
 
-    body{
-      min-height:100vh;
-      padding:24px;
-      background:
-        radial-gradient(950px 650px at 5% -10%, #1e293b 0%, transparent 60%),
-        radial-gradient(950px 650px at 110% 110%, #0f172a 0%, transparent 55%),
-        var(--bg);
-      color:var(--text);
-      font-family:-apple-system,BlinkMacSystemFont,"Inter","Segoe UI",Roboto,Arial,sans-serif;
-    }
+/* Layout */
+.app-shell{max-width:1040px;margin:0 auto}
+header{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:16px;
+  margin-bottom:20px;
+}
+header h1{font-size:26px;font-weight:650;margin-bottom:4px}
+header p{font-size:13px;color:var(--muted)}
 
-    .app-shell{
-      max-width:1040px;
-      margin:0 auto;
-    }
+.pill-auth{
+  padding:6px 12px;border-radius:999px;
+  background:rgba(16,185,129,.08);
+  color:#bbf7d0;font-size:12px;
+  display:flex;align-items:center;gap:6px;
+}
+.pill-auth-dot{
+  width:8px;height:8px;border-radius:50%;
+  background:#22c55e; box-shadow:0 0 0 4px rgba(34,197,94,.25);
+}
 
-    header{
-      display:flex;
-      align-items:flex-start;
-      justify-content:space-between;
-      gap:16px;
-      margin-bottom:20px;
-    }
+.card{
+  background:radial-gradient(circle at top left,rgba(148,163,184,.12),transparent 55%),var(--card);
+  border:1px solid rgba(30,64,175,.55);
+  border-radius:var(--radius-lg);
+  padding:20px;
+  margin-bottom:18px;
+  box-shadow:var(--shadow);
+}
+.card-header{display:flex;justify-content:space-between;margin-bottom:10px}
+.card-title{font-size:14px;font-weight:600}
+.card-subtitle{font-size:12px;color:var(--muted)}
 
-    header h1{
-      font-size:26px;
-      font-weight:650;
-      letter-spacing:.02em;
-      margin-bottom:4px;
-    }
+.row{display:flex;flex-wrap:wrap;gap:10px}
+.input-shell{flex:1 1 240px}
+label.small-label{font-size:11px;color:var(--muted)}
+input{
+  width:100%;
+  padding:9px 14px;
+  border-radius:999px;
+  border:1px solid var(--border);
+  background:#0f172a;
+  color:var(--text);
+}
+input:focus{outline:none;border-color:var(--accent2)}
 
-    header p{
-      font-size:13px;
-      color:var(--muted);
-    }
+.btn-bar{display:flex;gap:8px}
+.btn{
+  border-radius:999px;padding:9px 16px;
+  border:1px solid transparent;
+  background:transparent;
+  color:var(--text);
+  cursor:pointer;
+}
+.btn-primary{
+  background:linear-gradient(135deg,var(--accent),var(--accent2));
+}
+.btn-secondary{
+  background:#0f172a;border-color:var(--border);
+}
+.btn-ghost{
+  border:1px solid rgba(148,163,184,.25);
+  color:var(--muted);
+}
 
-    .pill-auth{
-      align-self:flex-start;
-      padding:6px 12px;
-      border-radius:999px;
-      background:rgba(16,185,129,.08);
-      color:#bbf7d0;
-      font-size:12px;
-      display:flex;
-      align-items:center;
-      gap:6px;
-    }
+.status-row{
+  display:flex;justify-content:space-between;
+  font-size:12px;color:var(--muted);
+}
+.status-dot{
+  width:7px;height:7px;border-radius:50%;background:#64748b;margin-right:6px;
+}
+.status-dot.is-busy{
+  background:var(--accent2);
+  box-shadow:0 0 0 4px rgba(34,211,238,.15);
+}
 
-    .pill-auth-dot{
-      width:8px;
-      height:8px;
-      border-radius:999px;
-      background:#22c55e;
-      box-shadow:0 0 0 4px rgba(34,197,94,.25);
-    }
+.tasks-wrapper{display:grid;gap:12px}
 
-    .card{
-      background:radial-gradient(circle at top left,rgba(148,163,184,.12) 0,transparent 55%),var(--card);
-      border-radius:var(--radius-lg);
-      border:1px solid rgba(30,64,175,.55);
-      box-shadow:var(--shadow);
-      padding:20px 22px;
-      margin-bottom:18px;
-    }
+.task-section{
+  background:var(--card-soft);
+  border:1px solid var(--border);
+  border-radius:var(--radius-sm);
+  padding:12px;
+}
+.task-section-header{
+  display:flex;justify-content:space-between;
+}
+.task-section-title{font-size:12px;font-weight:600}
+.task-section-count{font-size:11px;color:var(--muted)}
 
-    .card-header{
-      display:flex;
-      justify-content:space-between;
-      align-items:center;
-      margin-bottom:14px;
-    }
+.task-row{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  padding:6px;
+  border-radius:8px;
+  cursor:pointer;
+}
+.task-row:hover{
+  background:rgba(30,64,175,.16);
+}
 
-    .card-title{
-      font-size:14px;
-      font-weight:600;
-    }
+/* ✅ REAL BUBBLES */
+.bubble{
+  width:18px;height:18px;border-radius:50%;
+  border:2px solid #64748b;
+  position:relative;
+  flex:0 0 18px;
+  transition:.15s;
+}
+.bubble::after{
+  content:"";
+  position:absolute;
+  inset:3px;
+  border-radius:50%;
+  opacity:0;
+  transition:.15s;
+}
+.bubble-empty{
+  border-color:#64748b;
+}
+.bubble-filled{
+  border-color:var(--accent2);
+  box-shadow:0 0 8px rgba(34,211,238,.6), inset 0 0 3px rgba(34,211,238,.6);
+}
+.bubble-filled::after{
+  background:var(--accent2);
+  opacity:1;
+  box-shadow:0 0 4px rgba(34,211,238,.9);
+}
 
-    .card-subtitle{
-      font-size:12px;
-      color:var(--muted);
-    }
+.task-label{
+  flex:1;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
 
-    .task-section{
-      background:var(--card-soft);
-      border-radius:var(--radius-sm);
-      border:1px solid var(--border);
-      padding:12px;
-      margin-bottom:12px;
-    }
+.no-tasks{color:var(--muted);font-size:11px;padding:4px}
 
-    .task-section-header{
-      display:flex;
-      justify-content:space-between;
-      margin-bottom:6px;
-    }
+.hint{font-size:11px;color:var(--muted);margin-top:8px}
 
-    .task-section-title{
-      font-size:12px;
-      font-weight:600;
-    }
+.results-box{
+  border:1px solid var(--border);
+  background:#020617;
+  border-radius:var(--radius-sm);
+  padding:10px;font-size:11px;
+  font-family:monospace;
+  white-space:pre-wrap;
+}
 
-    .task-section-count{
-      font-size:11px;
-      color:var(--muted);
-    }
-
-    .task-row{
-      display:flex;
-      align-items:center;
-      gap:12px;
-      padding:6px 4px;
-      border-radius:8px;
-      cursor:pointer;
-      font-size:12px;
-      transition:background .12s ease;
-    }
-
-    .task-row:hover{
-      background:rgba(30,64,175,.16);
-    }
-
-    /* =====================================================
-       ✅ TRUE UI BUBBLES (REPLACES SYMBOLS)
-    ===================================================== */
-
-    .bubble{
-      width:18px;
-      height:18px;
-      border-radius:50%;
-      border:2px solid #64748b;
-      position:relative;
-      flex:0 0 18px;
-      transition:.18s ease;
-      box-shadow:none;
-      background:transparent;
-    }
-
-    /* Hover glow */
-    .task-row:hover .bubble{
-      border-color:var(--accent2);
-    }
-
-    /* Inner dot */
-    .bubble::after{
-      content:"";
-      position:absolute;
-      inset:3px;
-      border-radius:50%;
-      background:transparent;
-      opacity:0;
-      transition:.16s ease;
-    }
-
-    /* CHECKED */
-    .bubble-filled{
-      border-color:var(--accent2);
-      box-shadow:
-        0 0 0 2px rgba(34,211,238,.2),
-        0 0 8px rgba(34,211,238,.65);
-    }
-
-    .bubble-filled::after{
-      background:var(--accent2);
-      opacity:1;
-      box-shadow:0 0 4px rgba(34,211,238,.85);
-    }
-
-    /* UNCHECKED */
-    .bubble-empty{
-      border-color:#64748b;
-    }
-
-    .task-label{
-      flex:1;
-      white-space:nowrap;
-      overflow:hidden;
-      text-overflow:ellipsis;
-    }
-
-    .no-tasks{
-      color:var(--muted);
-      font-size:11px;
-      padding:4px 0 2px;
-    }
-
-    .hint{
-      margin-top:6px;
-      color:var(--muted);
-      font-size:11px;
-    }
-  </style>
+.error{color:var(--danger);font-size:11px;margin-top:6px}
+.empty{color:var(--muted)}
+</style>
 </head>
 
 <body>
@@ -225,95 +198,243 @@
 <header>
   <div>
     <h1>Trip Check-In Bot</h1>
-    <p>Review Delivery / Pickup / Linehaul tasks — toggle bubbles to modify check-in state.</p>
+    <p>Review and toggle Delivery / Pickup / Linehaul check-ins</p>
   </div>
-
   <div class="pill-auth">
     <span class="pill-auth-dot"></span> Authenticated
   </div>
 </header>
 
-<div id="tasks"></div>
+<section class="card">
+  <div class="card-header">
+    <div>
+      <div class="card-title">Trip Search</div>
+      <div class="card-subtitle">Enter FMS trip #</div>
+    </div>
+  </div>
 
-<p class="hint">
-  Click any bubble row to toggle — glowing = checked in, hollow = open.
-</p>
+  <div class="row">
+    <div class="input-shell">
+      <label class="small-label">Trip #</label>
+      <input id="trip-input" placeholder="B01KJY"/>
+    </div>
+
+    <div class="btn-bar">
+      <button id="btn-load" class="btn btn-primary">🔍 Load Tasks</button>
+      <button id="btn-apply" class="btn btn-secondary" disabled>✅ Apply</button>
+      <button id="btn-clear" class="btn btn-ghost">🧹 Clear</button>
+    </div>
+  </div>
+
+  <div class="status-row">
+    <div><span id="status-dot" class="status-dot"></span><span id="status-text">Idle.</span></div>
+    <div id="elapsed-text">Elapsed: 0.0s</div>
+  </div>
+</section>
+
+<section class="card">
+  <div class="card-header">
+    <div>
+      <div class="card-title">Tasks Checklist</div>
+      <div class="card-subtitle">Click bubbles to toggle</div>
+    </div>
+  </div>
+
+  <div class="tasks-wrapper">
+    <div class="task-section">
+      <div class="task-section-header">
+        <div class="task-section-title">Delivery Tasks</div>
+        <div class="task-section-count" id="count-delivery">(0)</div>
+      </div>
+      <div id="list-delivery"></div>
+    </div>
+
+    <div class="task-section">
+      <div class="task-section-header">
+        <div class="task-section-title">Pickup Tasks</div>
+        <div class="task-section-count" id="count-pickup">(0)</div>
+      </div>
+      <div id="list-pickup"></div>
+    </div>
+
+    <div class="task-section">
+      <div class="task-section-header">
+        <div class="task-section-title">Linehaul Tasks</div>
+        <div class="task-section-count" id="count-linehaul">(0)</div>
+      </div>
+      <div id="list-linehaul"></div>
+    </div>
+  </div>
+
+  <div class="hint">
+    Glowing bubble = checked in. Hollow = open.
+  </div>
+
+  <div id="error-text" class="error" style="display:none;"></div>
+</section>
+
+<section class="card">
+  <div class="card-header">
+    <div class="card-title">Results</div>
+  </div>
+  <div id="results-box" class="results-box empty">No results yet.</div>
+</section>
 
 <script>
-  // ============================================================
-  // DEMO MOCK (replace with existing logic if already present)
-  // ============================================================
+// =========================
+// DATA + STATE
+// =========================
+let tasks=[], tripNo="", lastStartTime=0;
 
-  const tasks = [
-    { do:"251100010923", pro:"50011223", pu:"7690001", type:"Delivery", complete:false },
-    { do:"250000331573", pro:"", pu:"", type:"Linehaul", complete:true }
-  ];
+const el={
+  tripInput:document.getElementById("trip-input"),
+  btnLoad:document.getElementById("btn-load"),
+  btnApply:document.getElementById("btn-apply"),
+  btnClear:document.getElementById("btn-clear"),
+  statusDot:document.getElementById("status-dot"),
+  statusText:document.getElementById("status-text"),
+  elapsedText:document.getElementById("elapsed-text"),
+  listDelivery:document.getElementById("list-delivery"),
+  listPickup:document.getElementById("list-pickup"),
+  listLinehaul:document.getElementById("list-linehaul"),
+  countDelivery:document.getElementById("count-delivery"),
+  countPickup:document.getElementById("count-pickup"),
+  countLinehaul:document.getElementById("count-linehaul"),
+  resultsBox:document.getElementById("results-box"),
+  errorText:document.getElementById("error-text")
+};
 
-  const container = document.getElementById("tasks");
+const clean=v=>String(v??"").trim();
+const isComplete=s=>clean(s).toLowerCase()==="complete";
 
-  render(tasks);
+function setStatus(t,b){
+  el.statusText.textContent=t;
+  el.statusDot.classList.toggle("is-busy",b);
+}
+function reset(){
+  tasks=[];
+  render();
+  el.resultsBox.textContent="No results yet.";
+  el.resultsBox.classList.add("empty");
+}
 
-  function render(tasks){
-    container.innerHTML = "";
+// =========================
+// API
+// =========================
+async function fetchTasks(trip){
+  const r=await fetch("/api/fms",{
+    method:"POST",
+    headers:{ "Content-Type":"application/json" },
+    body:JSON.stringify({
+      action:"getTasks",
+      tripNo:trip
+    })
+  });
+  if(!r.ok) throw new Error("Load failed");
+  return r.json();
+}
 
-    const sections = {
-      Delivery: [],
-      Pickup: [],
-      Linehaul: []
+// =========================
+// RENDER
+// =========================
+function normalize(raw){
+  return raw.map(t=>{
+    const o={
+      do:clean(t.do),
+      pro:clean(t.pro),
+      pu:clean(t.pu),
+      taskNo:t.taskNo,
+      taskType:clean(t.type),
+      status:clean(t.status)
+    };
+    o.originalComplete=isComplete(o.status);
+    o.currentComplete=o.originalComplete;
+    return o;
+  });
+}
+
+function renderSection(elm,list){
+  elm.innerHTML="";
+  if(!list.length){
+    elm.innerHTML='<div class="no-tasks">None found.</div>';
+    return;
+  }
+  list.forEach(t=>{
+    const row=document.createElement("div");
+    row.className="task-row";
+    row.dataset.taskNo=t.taskNo;
+
+    const b=document.createElement("div");
+    b.className="bubble "+(t.currentComplete?"bubble-filled":"bubble-empty");
+
+    row.appendChild(b);
+
+    const l=document.createElement("div");
+    l.className="task-label";
+
+    l.textContent=
+      t.taskType.toLowerCase().includes("linehaul")
+      ? `LH# ${t.do}`
+      : `DO ${t.do} | PRO ${t.pro||"—"} | PU ${t.pu||"—"}`;
+
+    row.appendChild(l);
+
+    row.onclick=()=>{
+      t.currentComplete=!t.currentComplete;
+      b.classList.toggle("bubble-filled",t.currentComplete);
+      b.classList.toggle("bubble-empty",!t.currentComplete);
     };
 
-    tasks.forEach(t => {
-      sections[t.type].push(t);
-    });
+    elm.appendChild(row);
+  });
+}
 
-    for(const k in sections){
-      const sec = document.createElement("div");
-      sec.className="task-section";
+function render(){
+  const d=tasks.filter(t=>t.taskType.startsWith("Del"));
+  const p=tasks.filter(t=>t.taskType.startsWith("Pick"));
+  const l=tasks.filter(t=>t.taskType.toLowerCase().includes("line"));
 
-      sec.innerHTML=`
-        <div class="task-section-header">
-          <div class="task-section-title">${k} Tasks</div>
-          <div class="task-section-count">(${sections[k].length})</div>
-        </div>
-      `;
+  renderSection(el.listDelivery,d);
+  renderSection(el.listPickup,p);
+  renderSection(el.listLinehaul,l);
 
-      if(sections[k].length === 0){
-        sec.innerHTML += `<div class="no-tasks">No ${k} tasks found.</div>`;
-      }
+  el.countDelivery.textContent=`(${d.length})`;
+  el.countPickup.textContent=`(${p.length})`;
+  el.countLinehaul.textContent=`(${l.length})`;
+}
 
-      sections[k].forEach(task => {
-        const row = document.createElement("div");
-        row.className="task-row";
+// =========================
+// EVENTS
+// =========================
+el.btnLoad.onclick=async()=>{
+  tripNo=clean(el.tripInput.value);
+  if(!tripNo)return;
 
-        const bubble = document.createElement("div");
-        bubble.className="bubble " + (task.complete ? "bubble-filled" : "bubble-empty");
+  reset();
+  setStatus(`Loading Trip ${tripNo}…`,true);
 
-        row.appendChild(bubble);
-
-        const label = document.createElement("div");
-        label.className="task-label";
-
-        label.textContent = task.type === "Linehaul"
-          ? `LH# ${task.do}`
-          : `DO ${task.do} | PRO ${task.pro || "—"} | PU ${task.pu || "—"}`;
-
-        row.appendChild(label);
-
-        row.addEventListener("click",() => {
-          task.complete = !task.complete;
-          bubble.classList.toggle("bubble-filled",task.complete);
-          bubble.classList.toggle("bubble-empty",!task.complete);
-        });
-
-        sec.appendChild(row);
-      });
-
-      container.appendChild(sec);
-    }
+  try{
+    const data=await fetchTasks(tripNo);
+    tasks=normalize(data.tasks||[]);
+    render();
+    el.btnApply.disabled=!tasks.length;
+    setStatus(`Tasks loaded for ${tripNo}`,false);
+  }catch{
+    el.errorText.textContent="Failed loading tasks.";
+    el.errorText.style.display="block";
+    setStatus("Load failed.",false);
   }
+};
 
+el.btnClear.onclick = ()=>{
+  el.tripInput.value="";
+  tripNo="";
+  reset();
+  setStatus("Idle.",false);
+};
+
+setStatus("Idle.");
 </script>
 
-</div>
 </body>
 </html>

@@ -1,6 +1,6 @@
 // /api/fms.js
 // Trip Check-In Bot backend
-// Full OAuth login, FMS login, cookie merging, dual-token authentication
+// OAuth login + FMS login + NO COOKIE MERGING (Fix B)
 
 import { parse } from "cookie";
 
@@ -15,20 +15,20 @@ const FMS_TRIP_TASKS_URL = `${FMS_BASE}/fms-platform-dispatch-management/TripDet
 const FMS_CHECKIN_URL    = `${FMS_BASE}/fms-platform-dispatch-management/TripDetail/TaskCheckIn`;
 const FMS_UNDO_URL       = `${FMS_BASE}/fms-platform-dispatch-management/TripDetail/CancelTaskCheckIn`;
 
-// Static values from HAR
 const FMS_CLIENT = "FMS_WEB";
 const FMS_COMPANY_ID = "SBFH";
 
-// ENV credentials
 const FMS_USER = process.env.FMS_USER;
 const FMS_PASS = process.env.FMS_PASS;
 
-// Cached tokens + cookies
+// Cached tokens
 let OAUTH_TOKEN = null;
 let OAUTH_EXP   = 0;
 let FMS_TOKEN   = null;
 let FMS_EXP     = 0;
-let MERGED_COOKIES = "";
+
+// Only store FMS cookies (Fix B)
+let FMS_COOKIES = "";
 
 /* ================================
    HELPERS
@@ -41,18 +41,17 @@ function extractCookies(resp) {
   const raw = resp.headers.get("set-cookie");
   if (!raw) return [];
 
-  // Split combined cookies safely
+  // Split safely on cookie boundaries
   return raw.split(/,(?=\S+=)/g).map(c => c.trim());
 }
 
-function mergeCookies(arr1, arr2) {
-  const map = new Map();
-  [...arr1, ...arr2].forEach(c => {
+function convertCookieArray(arr) {
+  return arr.map(c => {
     const parsed = parse(c);
     const name = Object.keys(parsed)[0];
-    if (name) map.set(name, parsed[name]);
-  });
-  return Array.from(map.entries()).map(([k, v]) => `${k}=${v}`).join("; ");
+    if (!name) return null;
+    return `${name}=${parsed[name]}`;
+  }).filter(Boolean).join("; ");
 }
 
 /* ================================
@@ -60,44 +59,35 @@ function mergeCookies(arr1, arr2) {
 ================================ */
 async function loginOAuth(force = false) {
   const now = Date.now();
-  if (!force && OAUTH_TOKEN && now < OAUTH_EXP) return { token: OAUTH_TOKEN };
+  if (!force && OAUTH_TOKEN && now < OAUTH_EXP) return OAUTH_TOKEN;
 
   const params = new URLSearchParams();
   params.set("grant_type", "password");
-  params.set("client_id", "7cd6c6e4-ee68-4b8a-aadf-116b81d90bce"); // from HAR
+  params.set("client_id", "7cd6c6e4-ee68-4b8a-aadf-116b81d90bce");
   params.set("username", FMS_USER);
   params.set("password", FMS_PASS);
 
   const resp = await fetch(OAUTH_URL, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/x-www-form-urlencoded"
-    },
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: params,
   });
 
-  if (!resp.ok) {
-    throw new Error(`OAuth login failed: HTTP ${resp.status}`);
-  }
+  if (!resp.ok) throw new Error(`OAuth login failed: HTTP ${resp.status}`);
 
   const data = await resp.json();
-  const cookies = extractCookies(resp);
-
   OAUTH_TOKEN = data.access_token;
-  OAUTH_EXP   = Date.now() + (data.expires_in - 60) * 1000; // 1m leeway
+  OAUTH_EXP   = Date.now() + (data.expires_in - 60) * 1000; // 60s safety
 
-  // merge cookies into global pool
-  MERGED_COOKIES = mergeCookies(cookies, []);
-
-  return { token: OAUTH_TOKEN, cookies };
+  return OAUTH_TOKEN;
 }
 
 /* ================================
-   FMS LOGIN
+   FMS LOGIN  (Fix B – only keep FMS cookies)
 ================================ */
 async function loginFms(force = false) {
   const now = Date.now();
-  if (!force && FMS_TOKEN && now < FMS_EXP) return { token: FMS_TOKEN };
+  if (!force && FMS_TOKEN && now < FMS_EXP) return { token: FMS_TOKEN, cookies: FMS_COOKIES };
 
   const resp = await fetch(FMS_LOGIN_URL, {
     method: "POST",
@@ -105,10 +95,7 @@ async function loginFms(force = false) {
       "fms-client": FMS_CLIENT,
       "Content-Type": "application/json"
     },
-    body: JSON.stringify({
-      account: FMS_USER,
-      password: FMS_PASS
-    })
+    body: JSON.stringify({ account: FMS_USER, password: FMS_PASS })
   });
 
   if (!resp.ok) {
@@ -117,49 +104,49 @@ async function loginFms(force = false) {
   }
 
   const data = await resp.json();
-  const cookies = extractCookies(resp);
 
-  const token =
+  FMS_TOKEN =
     data.token ||
     data?.data?.token ||
     data?.result?.token ||
     "";
 
-  if (!token) throw new Error("FMS login returned no token");
+  if (!FMS_TOKEN) {
+    throw new Error("FMS login returned no token");
+  }
 
-  FMS_TOKEN = token;
-  FMS_EXP   = Date.now() + 55 * 60 * 1000;
+  FMS_EXP = Date.now() + 55 * 60 * 1000;
 
-  // merge cookies with OAuth cookies
-  MERGED_COOKIES = mergeCookies(MERGED_COOKIES.split("; "), cookies);
+  // Only store cookies returned by THIS login, no merging
+  const cookies = extractCookies(resp);
+  FMS_COOKIES = convertCookieArray(cookies);
 
-  return { token: FMS_TOKEN, cookies };
+  return { token: FMS_TOKEN, cookies: FMS_COOKIES };
 }
 
 /* ================================
    DISPATCH REQUEST WRAPPER
 ================================ */
 async function dispatchFetch(url, opts = {}, retry = true) {
-  await loginOAuth();
-  await loginFms();
+  const oauth = await loginOAuth();
+  const fms   = await loginFms();
 
   const headers = {
-    "authorization": `Bearer ${OAUTH_TOKEN}`,
-    "fms-token": FMS_TOKEN,
+    "authorization": `Bearer ${oauth}`,
+    "fms-token": fms.token,
     "fms-client": FMS_CLIENT,
     "company-id": FMS_COMPANY_ID,
-    "cookie": MERGED_COOKIES,
+    "cookie": FMS_COOKIES,        // FIX B — FMS cookies only
+    "accept": "application/json, text/plain, */*",
     "referer": "https://fms.item.com/",
     "user-agent": "Mozilla/5.0",
-    "accept": "application/json, text/plain, */*",
-    "accept-language": "en-US,en;q=0.9",
     ...(opts.headers || {})
   };
 
   const resp = await fetch(url, { ...opts, headers });
 
   if ((resp.status === 401 || resp.status === 403) && retry) {
-    // retry after refreshing both tokens
+    // Refresh tokens + cookies
     await loginOAuth(true);
     await loginFms(true);
     return dispatchFetch(url, opts, false);
@@ -269,9 +256,6 @@ export default async function handler(req, res) {
         });
       }
 
-      /* ---------------------------
-         DEFAULT
-      -----------------------------*/
       default:
         return res.status(400).json({ error: "Unknown action" });
     }

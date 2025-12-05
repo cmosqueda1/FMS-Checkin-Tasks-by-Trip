@@ -1,12 +1,19 @@
-// /api/fms.js
-//
-// FULL PRODUCTION VERSION
-// - Unified backend for Trip Tasks, File Lookup, File Upload,
-//   Check-in, Cancel, POD/BOL enforcement
-//
-// Uses FMS credentials from env:
-//   FMS_USER, FMS_PASS
-//
+/**
+ * /api/fms.js
+ * Trip Check-In Bot — Full Production Backend
+ *
+ * Includes:
+ *  - Login + Token Cache
+ *  - Get Tasks
+ *  - Get Files for Trip
+ *  - Upload File (multipart)
+ *  - Delivery Check-in / Cancel
+ *  - Pickup Check-in / Cancel
+ *  - Linehaul Check-in / Cancel
+ *  - File-to-task matching (Hybrid C)
+ */
+
+import Busboy from "busboy";
 
 /* =====================================================
    CONFIG
@@ -14,18 +21,32 @@
 
 const FMS_BASE = "https://fms.item.com";
 
+// LOGIN
 const LOGIN_URL = `${FMS_BASE}/fms-platform-user/Auth/Login`;
-const TASKS_URL = `${FMS_BASE}/fms-platform-dispatch-management/TripDetail/GetTaskList`;
 
-const FILES_URL = `${FMS_BASE}/fms-platform-dispatch-management/Trips/GetFileInfoByTripId`;
+// TASK LIST
+const TASK_LIST_URL =
+  `${FMS_BASE}/fms-platform-dispatch-management/TripDetail/GetTaskList`;
 
-const FILE_UPLOAD_URL = `${FMS_BASE}/fms-platform-file/Storage/Upload`;
+// FILE LIST
+const FILE_LIST_URL =
+  `${FMS_BASE}/fms-platform-dispatch-management/Trips/GetFileInfoByTripId`;
 
-const TASK_COMPLETE_URL = `${FMS_BASE}/fms-platform-dispatch-management/TripDetail/TaskComplete`;
-const TASK_CANCEL_URL = `${FMS_BASE}/fms-platform-dispatch-management/TripDetail/TaskCompleteCancel`;
+// FILE UPLOAD
+const FILE_UPLOAD_URL =
+  `${FMS_BASE}/fms-platform-file/Storage/Upload`;
 
-const LH_REVERT_URL = `${FMS_BASE}/fms-platform-dispatch-management/lh/revert-arrived`;
+// DELIVERY / PICKUP / LINEHAUL CHECK-IN/CANCEL
+const TASK_COMPLETE_URL =
+  `${FMS_BASE}/fms-platform-dispatch-management/TripDetail/TaskComplete`;
 
+const TASK_CANCEL_URL =
+  `${FMS_BASE}/fms-platform-dispatch-management/TripDetail/TaskCompleteCancel`;
+
+const LINEHAUL_REVERT_URL =
+  `${FMS_BASE}/fms-platform-dispatch-management/lh/revert-arrived`;
+
+// CONSTANTS
 const FMS_CLIENT = "FMS_WEB";
 const COMPANY_ID = "SBFH";
 
@@ -44,8 +65,8 @@ if (!FMS_USER || !FMS_PASS) {
    TOKEN CACHE
 =====================================================*/
 
-let FMS_TOKEN = null;
-let AUTH_TOKEN = null;
+let FMS_TOKEN = null;   // small JWT
+let AUTH_TOKEN = null;  // RSA token
 let TOKEN_TS = 0;
 
 const TOKEN_TTL = 55 * 60 * 1000;
@@ -57,16 +78,8 @@ const TOKEN_TTL = 55 * 60 * 1000;
 async function fmsLogin(force = false) {
   const now = Date.now();
 
-  if (
-    !force &&
-    FMS_TOKEN &&
-    AUTH_TOKEN &&
-    now - TOKEN_TS < TOKEN_TTL
-  ) {
-    return {
-      fmsToken: FMS_TOKEN,
-      authToken: AUTH_TOKEN
-    };
+  if (!force && FMS_TOKEN && AUTH_TOKEN && now - TOKEN_TS < TOKEN_TTL) {
+    return { fmsToken: FMS_TOKEN, authToken: AUTH_TOKEN };
   }
 
   const resp = await fetch(LOGIN_URL, {
@@ -81,29 +94,20 @@ async function fmsLogin(force = false) {
     })
   });
 
-  if (!resp.ok) {
-    const t = await resp.text();
-    throw new Error(`FMS login failed: ${t}`);
-  }
+  if (!resp.ok) throw new Error("FMS Login Failed");
 
-  const json = await resp.json().catch(() => null);
-  const data = json?.data || json || {};
+  const json = await resp.json();
+  const data = json?.data || {};
 
-  const fms = data.token;
-  const auth = data.third_party_token || data.thirdPartyToken;
+  FMS_TOKEN = data.token;
+  AUTH_TOKEN = data.third_party_token || data.thirdPartyToken;
 
-  if (!fms || !auth) {
-    throw new Error("Login succeeded but tokens were missing");
-  }
+  if (!FMS_TOKEN || !AUTH_TOKEN)
+    throw new Error("Login succeeded but tokens missing");
 
-  FMS_TOKEN = fms;
-  AUTH_TOKEN = auth;
   TOKEN_TS = now;
 
-  return {
-    fmsToken: fms,
-    authToken: auth
-  };
+  return { fmsToken: FMS_TOKEN, authToken: AUTH_TOKEN };
 }
 
 /* =====================================================
@@ -117,8 +121,8 @@ async function getHeaders(extra = {}) {
     Accept: "application/json, text/plain, */*",
     Authorization: authToken,
     "fms-token": fmsToken,
-    "company-id": COMPANY_ID,
     "fms-client": FMS_CLIENT,
+    "company-id": COMPANY_ID,
     ...extra
   };
 }
@@ -144,7 +148,7 @@ async function fmsFetch(url, options = {}, retry = 0) {
 }
 
 /* =====================================================
-   NORMALIZATION
+   TASK NORMALIZATION
 =====================================================*/
 
 const clean = (v) => String(v ?? "").trim();
@@ -162,201 +166,284 @@ function normalizeTask(t) {
 }
 
 /* =====================================================
-   FILE UPLOAD HELPERS
+   FILE MATCHING (Hybrid C)
 =====================================================*/
+/**
+ * POD: match by taskNo first, fallback to PRO
+ * BOL: match by PRO only
+ */
+function matchFileToTask(file, task) {
+  const fileType = clean(file.file_type).toUpperCase();
 
-function resolveUploadDirectory(taskType) {
-  if (taskType.toLowerCase().includes("pick")) return "fms_order_bol";
-  if (taskType.toLowerCase().includes("deliv")) return "fms_trip_pod";
-  return "fms_trip_other";
-}
+  if (fileType === "POD") {
+    if (String(file.task_no) === String(task.taskNo)) return true;
+    if (clean(file.pro_no) === clean(task.pro)) return true;
+    return false;
+  }
 
-function resolveImageType(taskType) {
-  if (taskType.toLowerCase().includes("pick")) return "BOL";
-  if (taskType.toLowerCase().includes("deliv")) return "POD";
-  return "OTHER";
+  if (fileType === "BOL") {
+    return clean(file.pro_no) === clean(task.pro);
+  }
+
+  // fallback if unknown
+  return (
+    String(file.task_no) === String(task.taskNo) ||
+    clean(file.pro_no) === clean(task.pro)
+  );
 }
 
 /* =====================================================
-   MAIN HANDLER
+   PARSE MULTIPART (Busboy)
 =====================================================*/
+
+function parseMultipart(req) {
+  return new Promise((resolve, reject) => {
+    const busboy = Busboy({ headers: req.headers });
+
+    const files = [];
+    const fields = {};
+
+    busboy.on("file", (name, file, info) => {
+      const chunks = [];
+      file.on("data", (d) => chunks.push(d));
+      file.on("end", () => {
+        files.push({
+          fieldname: name,
+          filename: info.filename,
+          mimeType: info.mimeType,
+          buffer: Buffer.concat(chunks)
+        });
+      });
+    });
+
+    busboy.on("field", (name, val) => {
+      fields[name] = val;
+    });
+
+    busboy.on("finish", () => resolve({ files, fields }));
+    busboy.on("error", reject);
+
+    req.pipe(busboy);
+  });
+}
+
+/* =====================================================
+   UPLOAD FILE TO FMS
+=====================================================*/
+
+async function uploadToFMS(fileBuffer, filename, mimeType, directory) {
+  const form = new FormData();
+  form.append("files", new Blob([fileBuffer], { type: mimeType }), filename);
+  form.append("directory", directory);
+
+  const headers = await getHeaders({});
+
+  const resp = await fetch(FILE_UPLOAD_URL, {
+    method: "POST",
+    headers: {
+      ...headers
+      // DO NOT set Content-Type; FormData handles it
+    },
+    body: form
+  });
+
+  const json = await resp.json().catch(() => null);
+
+  if (!json?.is_success) {
+    throw new Error("FMS Upload Failed");
+  }
+
+  const item = json.data.items?.[0]?.file_info;
+
+  return {
+    fileName: item?.name,
+    fileUrl: item?.url,
+    extension: item?.file_extension
+  };
+}
+
+/* =====================================================
+   ACTION HANDLER
+=====================================================*/
+
+export const config = {
+  api: {
+    bodyParser: false // Required for file uploads
+  }
+};
 
 export default async function handler(req, res) {
   try {
-    if (req.method !== "POST") {
-      return res.status(405).json({ error: "Method not allowed" });
+    if (req.method === "POST" && req.headers["content-type"]?.includes("multipart/form-data")) {
+      // handle upload
+      const { files, fields } = await parseMultipart(req);
+
+      if (!files.length)
+        return res.status(400).json({ error: "No file uploaded." });
+
+      const f = files[0];
+      const directory = fields.directory || "fms_trip_pod";
+
+      const result = await uploadToFMS(
+        f.buffer,
+        f.filename,
+        f.mimeType,
+        directory
+      );
+
+      return res.json({
+        success: true,
+        ...result
+      });
     }
 
-    const { action } = req.body || {};
+    // JSON body
+    const body = req.body || {};
+    const { action } = body;
 
-    /* ------------------------------------------------
-       getTasks
-    ------------------------------------------------ */
+    /* =======================
+       GET TASKS
+    =======================*/
     if (action === "getTasks") {
-      const { tripNo } = req.body;
-      if (!tripNo) return res.status(400).json({ error: "tripNo required" });
-
-      const url = `${TASKS_URL}?tripNo=${encodeURIComponent(tripNo)}`;
+      const tripNo = clean(body.tripNo);
+      const url = `${TASK_LIST_URL}?tripNo=${encodeURIComponent(tripNo)}`;
 
       const resp = await fmsFetch(url, { method: "GET" });
+      const json = await resp.json().catch(() => null);
 
-      if (!resp.ok) {
-        const t = await resp.text();
-        return res.status(resp.status).json({
-          error: "FMS TaskList failed",
-          details: t
-        });
-      }
-
-      const json = await resp.json();
       const raw = json?.data || [];
       const tasks = raw.map(normalizeTask);
 
       return res.json({ tripNo, tasks });
     }
 
-    /* ------------------------------------------------
-       getTripFiles
-    ------------------------------------------------ */
-    if (action === "getTripFiles") {
-      const { tripNo } = req.body;
-      if (!tripNo) return res.status(400).json({ error: "tripNo required" });
+    /* =======================
+       GET FILES
+    =======================*/
+    if (action === "getFiles") {
+      const tripNo = clean(body.tripNo);
 
-      const resp = await fmsFetch(FILES_URL, {
+      const resp = await fmsFetch(FILE_LIST_URL, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ trip_no: tripNo })
       });
 
-      const json = await resp.json().catch(() => ({}));
-      return res.json(json);
+      const json = await resp.json().catch(() => null);
+      const files = json?.data?.files || [];
+
+      return res.json({ tripNo, files });
     }
 
-    /* ------------------------------------------------
-       uploadFile
-       (frontend sends raw base64 file)
-    ------------------------------------------------ */
-    if (action === "uploadFile") {
-      const { fileBase64, filename, taskType } = req.body;
-
-      if (!fileBase64 || !filename || !taskType) {
-        return res.status(400).json({
-          error: "fileBase64, filename, taskType required"
-        });
-      }
-
-      const directory = resolveUploadDirectory(taskType);
-
-      const boundary = "----FMSFormBoundary" + Math.random().toString(16);
-
-      const bodyParts = [];
-      const append = (str) => bodyParts.push(Buffer.from(str, "utf8"));
-
-      append(`--${boundary}\r\n`);
-      append(`Content-Disposition: form-data; name="files"; filename="${filename}"\r\n`);
-      append(`Content-Type: application/octet-stream\r\n\r\n`);
-      bodyParts.push(Buffer.from(fileBase64, "base64"));
-      append(`\r\n--${boundary}\r\n`);
-      append(`Content-Disposition: form-data; name="directory"\r\n\r\n`);
-      append(`${directory}\r\n`);
-      append(`--${boundary}--\r\n`);
-
-      const finalBody = Buffer.concat(bodyParts);
-
-      const headers = await getHeaders({
-        "Content-Type": `multipart/form-data; boundary=${boundary}`
-      });
-
-      const resp = await fetch(FILE_UPLOAD_URL, {
-        method: "POST",
-        headers,
-        body: finalBody
-      });
-
-      const json = await resp.json().catch(() => ({}));
-      return res.json(json);
-    }
-
-    /* ------------------------------------------------
-       checkinTask
-       (Delivery / Pickup / Linehaul)
-    ------------------------------------------------ */
-    if (action === "checkinTask") {
-      const { tripNo, taskNo, taskType, pro, uploadedFile } = req.body;
-
-      if (!tripNo || !taskNo || !taskType) {
-        return res.status(400).json({ error: "tripNo, taskNo, taskType required" });
-      }
-
-      const imageType = resolveImageType(taskType);
-
-      const image_list = [];
-      if (uploadedFile?.url && uploadedFile?.file_name) {
-        image_list.push({
-          image_type: imageType,
-          image_url: uploadedFile.url,
-          file_extension: uploadedFile.file_name.split(".").pop(),
-          file_name: uploadedFile.file_name
-        });
-      }
+    /* =======================
+       DELIVERY CHECKIN
+    =======================*/
+    if (action === "checkinDelivery") {
+      const { tripNo, taskNo, imageList, pro } = body;
 
       const payload = {
         trip_no: tripNo,
         task_no: taskNo,
         delivery_location: "",
-        image_list,
+        image_list: imageList || [],
         pro_number: pro || "",
         check_date: new Date().toISOString().slice(0, 19).replace("T", " ")
       };
 
       const resp = await fmsFetch(TASK_COMPLETE_URL, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload)
       });
 
-      const json = await resp.json().catch(() => ({}));
-      return res.json({ ok: resp.ok, status: resp.status, response: json });
+      return res.json({ success: resp.ok });
     }
 
-    /* ------------------------------------------------
-       cancelTask
-       (Delivery / Pickup / Linehaul)
-    ------------------------------------------------ */
-    if (action === "cancelTask") {
-      const { tripNo, taskNo, taskType } = req.body;
+    /* =======================
+       DELIVERY CANCEL
+    =======================*/
+    if (action === "undoDelivery") {
+      const { tripNo, taskNo } = body;
 
-      if (!tripNo || !taskNo || !taskType) {
-        return res.status(400).json({ error: "tripNo, taskNo, taskType required" });
-      }
+      const url =
+        `${TASK_CANCEL_URL}?tripNo=${encodeURIComponent(tripNo)}&taskNo=${taskNo}&stopNo=0`;
 
-      // Linehaul special endpoint
-      if (taskType.toLowerCase().includes("linehaul")) {
-        const resp = await fmsFetch(LH_REVERT_URL, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ task_no: taskNo })
-        });
-        const json = await resp.json().catch(() => ({}));
-        return res.json({ ok: resp.ok, status: resp.status, response: json });
-      }
+      const resp = await fmsFetch(url, { method: "POST", body: "{}" });
 
-      // Delivery + Pickup use same cancel endpoint
-      const url = `${TASK_CANCEL_URL}?tripNo=${tripNo}&taskNo=${taskNo}&stopNo=0`;
+      return res.json({ success: resp.ok });
+    }
 
-      const resp = await fmsFetch(url, {
+    /* =======================
+       PICKUP CHECKIN
+    =======================*/
+    if (action === "checkinPickup") {
+      const { tripNo, taskNo, imageList } = body;
+
+      const payload = {
+        trip_no: tripNo,
+        task_no: taskNo,
+        delivery_location: "",
+        image_list: imageList || []
+      };
+
+      const resp = await fmsFetch(TASK_COMPLETE_URL, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: "{}"
+        body: JSON.stringify(payload)
       });
 
-      const json = await resp.json().catch(() => ({}));
-      return res.json({ ok: resp.ok, status: resp.status, response: json });
+      return res.json({ success: resp.ok });
     }
 
-    /* ------------------------------------------------
-       Unknown action
-    ------------------------------------------------ */
+    /* =======================
+       PICKUP CANCEL
+    =======================*/
+    if (action === "undoPickup") {
+      const { tripNo, taskNo } = body;
+
+      const url =
+        `${TASK_CANCEL_URL}?tripNo=${encodeURIComponent(tripNo)}&taskNo=${taskNo}&stopNo=0`;
+
+      const resp = await fmsFetch(url, { method: "POST", body: "{}" });
+
+      return res.json({ success: resp.ok });
+    }
+
+    /* =======================
+       LINEHAUL CHECKIN
+    =======================*/
+    if (action === "checkinLinehaul") {
+      const { tripNo, taskNo } = body;
+
+      const payload = {
+        trip_no: tripNo,
+        task_no: taskNo,
+        delivery_location: "",
+        image_list: []
+      };
+
+      const resp = await fmsFetch(TASK_COMPLETE_URL, {
+        method: "POST",
+        body: JSON.stringify(payload)
+      });
+
+      return res.json({ success: resp.ok });
+    }
+
+    /* =======================
+       LINEHAUL CANCEL
+    =======================*/
+    if (action === "undoLinehaul") {
+      const { taskNo } = body;
+
+      const resp = await fmsFetch(LINEHAUL_REVERT_URL, {
+        method: "POST",
+        body: JSON.stringify({ task_no: taskNo })
+      });
+
+      return res.json({ success: resp.ok });
+    }
+
+    /* =======================
+       UNKNOWN ACTION
+    =======================*/
     return res.status(400).json({ error: "Unknown action" });
 
   } catch (err) {

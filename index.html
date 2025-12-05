@@ -505,10 +505,15 @@ function renderSection(elm,list){
       fb.className="file-badge";
       fb.textContent=t.taskType.startsWith("Del")?"POD":"BOL";
       row.appendChild(fb);
+
     } else if(t.fileTypeNeeded){
       const fb=document.createElement("span");
       fb.className="file-badge";
-      fb.style.color=var(--danger);
+
+      // FIXED: var() usage in JS
+      fb.style.color = getComputedStyle(document.documentElement)
+          .getPropertyValue("--danger");
+
       fb.textContent=`Missing ${t.fileTypeNeeded}`;
       row.appendChild(fb);
     }
@@ -560,12 +565,12 @@ async function processApply(){
         return;
       }
 
-      const r=await sendCheckin(t);
+      await sendCheckin(t);
       el.resultsBox.textContent+=
         `✔ CHECK-IN → DO ${t.do} | PRO ${t.pro} | PU ${t.pu}\n`;
 
     } else {
-      const r=await sendUndo(t);
+      await sendUndo(t);
       el.resultsBox.textContent+=
         `↩ UNDO → DO ${t.do} | PRO ${t.pro} | PU ${t.pu}\n`;
     }
@@ -602,7 +607,11 @@ el.uploadBtn.onclick=async()=>{
 
   } else {
     el.uploadSuccess.style.display="block";
-    el.uploadSuccess.style.color=var(--danger);
+
+    // FIXED: var() usage in JS
+    el.uploadSuccess.style.color = getComputedStyle(document.documentElement)
+        .getPropertyValue("--danger");
+
     el.uploadSuccess.textContent="Upload failed.";
   }
 };

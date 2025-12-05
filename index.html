@@ -6,6 +6,9 @@
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 
 <style>
+/* ======================================================================
+   THEME + BASE
+====================================================================== */
 :root{
   --bg:#05070b;
   --card:#0f1420;
@@ -16,6 +19,7 @@
   --accent2:#22d3ee;
   --border:#1f2933;
   --danger:#ef4444;
+  --ok:#10b981;
   --shadow:0 18px 45px rgba(0,0,0,.6);
   --radius-lg:18px;
   --radius-sm:10px;
@@ -33,8 +37,11 @@ body{
   font-family:-apple-system,BlinkMacSystemFont,"Inter","Segoe UI",Roboto,Arial,sans-serif;
 }
 
-/* Layout */
 .app-shell{max-width:1040px;margin:0 auto}
+
+/* ======================================================================
+   HEADER
+====================================================================== */
 header{
   display:flex;
   align-items:flex-start;
@@ -56,6 +63,9 @@ header p{font-size:13px;color:var(--muted)}
   background:#22c55e; box-shadow:0 0 0 4px rgba(34,197,94,.25);
 }
 
+/* ======================================================================
+   CARD
+====================================================================== */
 .card{
   background:radial-gradient(circle at top left,rgba(148,163,184,.12),transparent 55%),var(--card);
   border:1px solid rgba(30,64,175,.55);
@@ -100,6 +110,9 @@ input:focus{outline:none;border-color:var(--accent2)}
   color:var(--muted);
 }
 
+/* ======================================================================
+   STATUS
+====================================================================== */
 .status-row{
   display:flex;justify-content:space-between;
   font-size:12px;color:var(--muted);
@@ -112,6 +125,9 @@ input:focus{outline:none;border-color:var(--accent2)}
   box-shadow:0 0 0 4px rgba(34,211,238,.15);
 }
 
+/* ======================================================================
+   TASK LIST
+====================================================================== */
 .tasks-wrapper{display:grid;gap:12px}
 
 .task-section{
@@ -138,7 +154,7 @@ input:focus{outline:none;border-color:var(--accent2)}
   background:rgba(30,64,175,.16);
 }
 
-/* ✅ REAL BUBBLES */
+/* Bubbles */
 .bubble{
   width:18px;height:18px;border-radius:50%;
   border:2px solid #64748b;
@@ -146,38 +162,48 @@ input:focus{outline:none;border-color:var(--accent2)}
   flex:0 0 18px;
   transition:.15s;
 }
-.bubble::after{
-  content:"";
-  position:absolute;
-  inset:3px;
-  border-radius:50%;
-  opacity:0;
-  transition:.15s;
-}
-.bubble-empty{
-  border-color:#64748b;
-}
+.bubble-empty{ border-color:#64748b; }
 .bubble-filled{
   border-color:var(--accent2);
   box-shadow:0 0 8px rgba(34,211,238,.6), inset 0 0 3px rgba(34,211,238,.6);
 }
 .bubble-filled::after{
-  background:var(--accent2);
-  opacity:1;
+  content:"";position:absolute;inset:3px;
+  border-radius:50%;background:var(--accent2);opacity:1;
   box-shadow:0 0 4px rgba(34,211,238,.9);
 }
 
-.task-label{
-  flex:1;
-  white-space:nowrap;
-  overflow:hidden;
-  text-overflow:ellipsis;
+.task-label{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+.file-badge{
+  font-size:10px;
+  padding:2px 6px;
+  border-radius:6px;
+  background:#1e293b;
+  border:1px solid var(--border);
+  color:var(--accent2);
+  margin-left:6px;
 }
 
-.no-tasks{color:var(--muted);font-size:11px;padding:4px}
+/* ======================================================================
+   FILE UPLOAD PANEL — Global
+====================================================================== */
+#upload-panel{
+  margin-top:14px;
+  padding:14px;
+  border-radius:var(--radius-sm);
+  border:1px solid var(--border);
+  background:#0b1120;
+  display:none;
+}
+#upload-panel h3{font-size:13px;margin-bottom:8px}
+#upload-panel .need-file{font-size:12px;color:var(--muted);margin-bottom:6px}
+#upload-panel input[type=file]{margin-top:6px}
+#upload-panel-success{font-size:11px;color:var(--ok);margin-top:6px;display:none}
 
-.hint{font-size:11px;color:var(--muted);margin-top:8px}
-
+/* ======================================================================
+   RESULTS
+====================================================================== */
 .results-box{
   border:1px solid var(--border);
   background:#020617;
@@ -186,7 +212,6 @@ input:focus{outline:none;border-color:var(--accent2)}
   font-family:monospace;
   white-space:pre-wrap;
 }
-
 .error{color:var(--danger);font-size:11px;margin-top:6px}
 .empty{color:var(--muted)}
 </style>
@@ -205,6 +230,9 @@ input:focus{outline:none;border-color:var(--accent2)}
   </div>
 </header>
 
+<!-- ==============================================================
+     TRIP SEARCH
+============================================================== -->
 <section class="card">
   <div class="card-header">
     <div>
@@ -232,15 +260,20 @@ input:focus{outline:none;border-color:var(--accent2)}
   </div>
 </section>
 
+
+<!-- ==============================================================
+     TASK LIST + FILE STATUS
+============================================================== -->
 <section class="card">
   <div class="card-header">
     <div>
       <div class="card-title">Tasks Checklist</div>
-      <div class="card-subtitle">Click bubbles to toggle</div>
+      <div class="card-subtitle">Click bubbles to toggle / file status shown</div>
     </div>
   </div>
 
   <div class="tasks-wrapper">
+
     <div class="task-section">
       <div class="task-section-header">
         <div class="task-section-title">Delivery Tasks</div>
@@ -264,15 +297,25 @@ input:focus{outline:none;border-color:var(--accent2)}
       </div>
       <div id="list-linehaul"></div>
     </div>
-  </div>
 
-  <div class="hint">
-    Glowing bubble = checked in. Hollow = open.
   </div>
 
   <div id="error-text" class="error" style="display:none;"></div>
+
+  <!-- GLOBAL UPLOAD PANEL -->
+  <div id="upload-panel">
+    <h3>Upload Required File</h3>
+    <div id="upload-need" class="need-file"></div>
+    <input type="file" id="file-input" accept=".jpg,.jpeg,.png,.pdf"/>
+    <button id="btn-upload" class="btn btn-primary" style="margin-top:8px;">⬆ Upload</button>
+    <div id="upload-panel-success"></div>
+  </div>
 </section>
 
+
+<!-- ==============================================================
+     RESULTS
+============================================================== -->
 <section class="card">
   <div class="card-header">
     <div class="card-title">Results</div>
@@ -280,11 +323,12 @@ input:focus{outline:none;border-color:var(--accent2)}
   <div id="results-box" class="results-box empty">No results yet.</div>
 </section>
 
+
 <script>
-// =========================
-// DATA + STATE
-// =========================
-let tasks=[], tripNo="", lastStartTime=0;
+/* ======================================================================
+   STATE
+====================================================================== */
+let tasks=[], tripNo="", fileMap={}, pendingUploadTask=null;
 
 const el={
   tripInput:document.getElementById("trip-input"),
@@ -293,15 +337,19 @@ const el={
   btnClear:document.getElementById("btn-clear"),
   statusDot:document.getElementById("status-dot"),
   statusText:document.getElementById("status-text"),
-  elapsedText:document.getElementById("elapsed-text"),
   listDelivery:document.getElementById("list-delivery"),
   listPickup:document.getElementById("list-pickup"),
   listLinehaul:document.getElementById("list-linehaul"),
+  resultsBox:document.getElementById("results-box"),
+  errorText:document.getElementById("error-text"),
+  uploadPanel:document.getElementById("upload-panel"),
+  uploadNeed:document.getElementById("upload-need"),
+  fileInput:document.getElementById("file-input"),
+  uploadBtn:document.getElementById("btn-upload"),
+  uploadSuccess:document.getElementById("upload-panel-success"),
   countDelivery:document.getElementById("count-delivery"),
   countPickup:document.getElementById("count-pickup"),
   countLinehaul:document.getElementById("count-linehaul"),
-  resultsBox:document.getElementById("results-box"),
-  errorText:document.getElementById("error-text")
 };
 
 const clean=v=>String(v??"").trim();
@@ -313,76 +361,162 @@ function setStatus(t,b){
 }
 function reset(){
   tasks=[];
+  fileMap={};
+  pendingUploadTask=null;
+
+  el.uploadPanel.style.display="none";
+  el.uploadSuccess.style.display="none";
+  el.uploadNeed.textContent="";
+  el.fileInput.value="";
+
   render();
   el.resultsBox.textContent="No results yet.";
   el.resultsBox.classList.add("empty");
 }
 
-// =========================
-// API
-// =========================
-async function fetchTasks(trip){
+/* ======================================================================
+   API
+====================================================================== */
+
+async function apiCall(payload){
   const r=await fetch("/api/fms",{
     method:"POST",
     headers:{ "Content-Type":"application/json" },
-    body:JSON.stringify({
-      action:"getTasks",
-      tripNo:trip
-    })
+    body:JSON.stringify(payload)
   });
-  if(!r.ok) throw new Error("Load failed");
   return r.json();
 }
 
-// =========================
-// RENDER
-// =========================
-function normalize(raw){
+async function fetchTasks(trip){
+  return apiCall({ action:"getTasks", tripNo:trip });
+}
+
+async function fetchFiles(trip){
+  return apiCall({ action:"getTripFiles", tripNo:trip });
+}
+
+async function uploadFile(task, file){
+  const body = new FormData();
+  body.append("file", file);
+
+  return apiCall({
+    action:"uploadFile",
+    task,
+    tripNo,
+    fileName:file.name
+  });
+}
+
+async function sendCheckin(task){
+  return apiCall({
+    action:"checkin",
+    tripNo,
+    task
+  });
+}
+
+async function sendUndo(task){
+  return apiCall({
+    action:"undo",
+    tripNo,
+    task
+  });
+}
+
+/* ======================================================================
+   NORMALIZE
+====================================================================== */
+function normalizeTasks(raw){
   return raw.map(t=>{
     const o={
       do:clean(t.do),
       pro:clean(t.pro),
       pu:clean(t.pu),
       taskNo:t.taskNo,
-      taskType:clean(t.type),
-      status:clean(t.status)
+      taskType:clean(t.taskType),
+      status:clean(t.status),
+      originalComplete:isComplete(t.status),
+      currentComplete:isComplete(t.status),
+      fileTypeNeeded:null,
+      fileFoundUrl:null
     };
-    o.originalComplete=isComplete(o.status);
-    o.currentComplete=o.originalComplete;
     return o;
   });
 }
 
+function applyFilesToTasks(){
+  for(const t of tasks){
+    const key = t.pro || t.pu || t.do;
+    const files = fileMap[key] || [];
+
+    if(t.taskType.startsWith("Del")){
+      const pod = files.find(f=>f.type==="POD");
+      if(pod){
+        t.fileTypeNeeded=null;
+        t.fileFoundUrl=pod.url;
+      } else {
+        t.fileTypeNeeded="POD";
+      }
+    }
+
+    if(t.taskType.startsWith("Pick")){
+      const bol = files.find(f=>f.type==="BOL");
+      if(bol){
+        t.fileTypeNeeded=null;
+        t.fileFoundUrl=bol.url;
+      } else {
+        t.fileTypeNeeded="BOL";
+      }
+    }
+  }
+}
+
+/* ======================================================================
+   RENDER
+====================================================================== */
 function renderSection(elm,list){
   elm.innerHTML="";
+
   if(!list.length){
     elm.innerHTML='<div class="no-tasks">None found.</div>';
     return;
   }
+
   list.forEach(t=>{
     const row=document.createElement("div");
     row.className="task-row";
-    row.dataset.taskNo=t.taskNo;
 
-    const b=document.createElement("div");
-    b.className="bubble "+(t.currentComplete?"bubble-filled":"bubble-empty");
+    const bubble=document.createElement("div");
+    bubble.className="bubble "+(t.currentComplete?"bubble-filled":"bubble-empty");
 
-    row.appendChild(b);
-
-    const l=document.createElement("div");
-    l.className="task-label";
-
-    l.textContent=
-      t.taskType.toLowerCase().includes("linehaul")
+    const label=document.createElement("div");
+    label.className="task-label";
+    label.textContent = t.taskType.includes("Line")
       ? `LH# ${t.do}`
       : `DO ${t.do} | PRO ${t.pro||"—"} | PU ${t.pu||"—"}`;
 
-    row.appendChild(l);
+    row.appendChild(bubble);
+    row.appendChild(label);
+
+    if(t.fileFoundUrl){
+      const fb=document.createElement("a");
+      fb.href=t.fileFoundUrl;
+      fb.target="_blank";
+      fb.className="file-badge";
+      fb.textContent=t.taskType.startsWith("Del")?"POD":"BOL";
+      row.appendChild(fb);
+    } else if(t.fileTypeNeeded){
+      const fb=document.createElement("span");
+      fb.className="file-badge";
+      fb.style.color=var(--danger);
+      fb.textContent=`Missing ${t.fileTypeNeeded}`;
+      row.appendChild(fb);
+    }
 
     row.onclick=()=>{
       t.currentComplete=!t.currentComplete;
-      b.classList.toggle("bubble-filled",t.currentComplete);
-      b.classList.toggle("bubble-empty",!t.currentComplete);
+      bubble.classList.toggle("bubble-filled",t.currentComplete);
+      bubble.classList.toggle("bubble-empty",!t.currentComplete);
     };
 
     elm.appendChild(row);
@@ -403,9 +537,80 @@ function render(){
   el.countLinehaul.textContent=`(${l.length})`;
 }
 
-// =========================
-// EVENTS
-// =========================
+/* ======================================================================
+   APPLY BUTTON LOGIC
+====================================================================== */
+async function processApply(){
+
+  el.resultsBox.textContent="";
+  el.resultsBox.classList.remove("empty");
+
+  for(const t of tasks){
+
+    if(t.currentComplete === t.originalComplete){
+      continue;
+    }
+
+    if(t.currentComplete){
+      if(t.fileTypeNeeded){
+        pendingUploadTask=t;
+        el.uploadPanel.style.display="block";
+        el.uploadNeed.textContent=`${t.fileTypeNeeded} required for DO ${t.do} | PRO ${t.pro}`;
+        setStatus("Upload required before check-in",false);
+        return;
+      }
+
+      const r=await sendCheckin(t);
+      el.resultsBox.textContent+=
+        `✔ CHECK-IN → DO ${t.do} | PRO ${t.pro} | PU ${t.pu}\n`;
+
+    } else {
+      const r=await sendUndo(t);
+      el.resultsBox.textContent+=
+        `↩ UNDO → DO ${t.do} | PRO ${t.pro} | PU ${t.pu}\n`;
+    }
+
+  }
+
+  setStatus("Done",false);
+}
+
+/* ======================================================================
+   FILE UPLOAD HANDLER
+====================================================================== */
+el.uploadBtn.onclick=async()=>{
+
+  if(!pendingUploadTask) return;
+
+  const file = el.fileInput.files[0];
+  if(!file){
+    alert("Choose a file first.");
+    return;
+  }
+
+  const up=await uploadFile(pendingUploadTask,file);
+
+  if(up?.success){
+
+    el.uploadSuccess.textContent="File uploaded successfully. Click Apply again.";
+    el.uploadSuccess.style.display="block";
+
+    pendingUploadTask.fileTypeNeeded=null;
+    pendingUploadTask.fileFoundUrl=up.url;
+
+    el.uploadPanel.style.display="none";
+
+  } else {
+    el.uploadSuccess.style.display="block";
+    el.uploadSuccess.style.color=var(--danger);
+    el.uploadSuccess.textContent="Upload failed.";
+  }
+};
+
+/* ======================================================================
+   EVENTS
+====================================================================== */
+
 el.btnLoad.onclick=async()=>{
   tripNo=clean(el.tripInput.value);
   if(!tripNo)return;
@@ -413,24 +618,34 @@ el.btnLoad.onclick=async()=>{
   reset();
   setStatus(`Loading Trip ${tripNo}…`,true);
 
-  try{
-    const data=await fetchTasks(tripNo);
-    tasks=normalize(data.tasks||[]);
-    render();
-    el.btnApply.disabled=!tasks.length;
-    setStatus(`Tasks loaded for ${tripNo}`,false);
-  }catch{
-    el.errorText.textContent="Failed loading tasks.";
-    el.errorText.style.display="block";
-    setStatus("Load failed.",false);
-  }
+  const tData=await fetchTasks(tripNo);
+  const fData=await fetchFiles(tripNo);
+
+  tasks=normalizeTasks(tData.tasks||[]);
+
+  fileMap = {};
+  (fData.files||[]).forEach(f=>{
+    const key=f.pro || f.tracking_no;
+    if(!fileMap[key]) fileMap[key]=[];
+    fileMap[key].push({
+      type:f.file_type,
+      url:f.file_public_url
+    });
+  });
+
+  applyFilesToTasks();
+  render();
+
+  el.btnApply.disabled=!tasks.length;
+  setStatus("Ready",false);
 };
 
-el.btnClear.onclick = ()=>{
+el.btnApply.onclick=processApply;
+
+el.btnClear.onclick=()=>{
   el.tripInput.value="";
-  tripNo="";
   reset();
-  setStatus("Idle.",false);
+  setStatus("Idle",false);
 };
 
 setStatus("Idle.");
